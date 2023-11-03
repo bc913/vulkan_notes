@@ -1,0 +1,207 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "config_base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "cacheVariables": {
+                "BC_USE_VOLK_LOADER": "ON",
+                "BC_USE_GLAD_LOADER": "OFF"
+            }
+        },
+        {
+            "name": "msvc",
+            "displayName": "msvc config base",
+            "inherits": "config_base",
+            "generator": "Visual Studio 16 2019",
+            "hidden": false,
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "ninja_multi_base",
+            "displayName": "Config ninja base preset",
+            "inherits": "config_base",
+            "generator": "Ninja Multi-Config",
+            "hidden": true,
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "strategy": "external"
+            }
+        },
+        {
+            "name": "ninja_win",
+            "displayName": "Ninja Win Multi",
+            "inherits": "ninja_multi_base",
+            "hidden": false,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "ninja_lnx",
+            "displayName": "Ninja Linux Multi",
+            "inherits": "ninja_multi_base",
+            "hidden": false,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc-11",
+                "CMAKE_CXX_COMPILER": "g++-11"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "win_debug",
+            "configurePreset": "msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_debug_clean",
+            "configurePreset": "msvc",
+            "configuration": "Debug",
+            "cleanFirst": true
+        },
+        {
+            "name": "win_release",
+            "configurePreset": "msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_release_clean",
+            "configurePreset": "msvc",
+            "configuration": "Release",
+            "cleanFirst": true
+        },
+        {
+            "name": "win_rel_deb_info",
+            "configurePreset": "msvc",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "win_min_size_rel",
+            "configurePreset": "msvc",
+            "configuration": "MinSizeRel"
+        },
+        {
+            "name": "ninja_win_debug",
+            "configurePreset": "ninja_win",
+            "configuration": "Debug"
+        },
+        {
+            "name": "ninja_win_debug_clean",
+            "configurePreset": "ninja_win",
+            "configuration": "Debug",
+            "cleanFirst": true
+        },
+        {
+            "name": "ninja_win_release",
+            "configurePreset": "ninja_win",
+            "configuration": "Release"
+        },
+        {
+            "name": "ninja_win_release_clean",
+            "configurePreset": "ninja_win",
+            "configuration": "Release",
+            "cleanFirst": true
+        },
+        {
+            "name": "ninja_win_rel_deb_info",
+            "configurePreset": "ninja_win",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "ninja_win_min_size_rel",
+            "configurePreset": "ninja_win",
+            "configuration": "MinSizeRel"
+        },
+        {
+            "name": "lnx_debug",
+            "configurePreset": "ninja_lnx",
+            "configuration": "Debug"
+        },
+        {
+            "name": "lnx_debug_clean",
+            "configurePreset": "ninja_lnx",
+            "configuration": "Debug",
+            "cleanFirst": true
+        },
+        {
+            "name": "lnx_release",
+            "configurePreset": "ninja_lnx",
+            "configuration": "Release"
+        },
+        {
+            "name": "lnx_release_clean",
+            "configurePreset": "ninja_lnx",
+            "configuration": "Release",
+            "cleanFirst": true
+        },
+        {
+            "name": "lnx_rel_deb_info",
+            "configurePreset": "ninja_lnx",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "lnx_min_size_rel",
+            "configurePreset": "ninja_lnx",
+            "configuration": "MinSizeRel"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "base",
+            "description": "",
+            "displayName": "",
+            "hidden": true,
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": true
+            }
+        },
+        {
+            "name": "msvc_test",
+            "hidden": false,
+            "inherits": "base",
+            "configurePreset": "msvc"
+        },
+        {
+            "name": "ninja_win_test",
+            "hidden": false,
+            "inherits": "base",
+            "configurePreset": "ninja_win"
+        },
+        {
+            "name": "linux_test",
+            "hidden": false,
+            "inherits": "base",
+            "configurePreset": "ninja_lnx"
+        }
+    ]
+}
