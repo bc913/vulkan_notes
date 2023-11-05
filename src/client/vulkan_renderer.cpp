@@ -198,6 +198,12 @@ void create_instance()
     uint32_t required_extension_count = 0;
     const char **required_extensions = NULL;
     required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
+// MoltenVK VK_ERROR_INCOMPATIBLE_DRIVER error:
+// Beginning with the 1.3.216 Vulkan SDK, the VK_KHR_PORTABILITY_subset extension is mandatory.
+#ifdef __APPLE__
+    requiredExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
+
     if (!required_extensions)
     {
         ERR_EXIT(
@@ -217,14 +223,20 @@ void create_instance()
     }
 
     // Creation information for a VkInstance (Vulkan Instance)
+    // tells the Vulkan driver which global extensions and validation layers we want to use
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+    // Extension info
     createInfo.enabledExtensionCount = required_extension_count;
     createInfo.ppEnabledExtensionNames = required_extensions;
     // TODO: No validation layers at the moment
     createInfo.enabledLayerCount = 0;
     createInfo.ppEnabledLayerNames = NULL;
+
+#ifdef __APPLE__
+    createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
     // Create instance
     // TODO: custom allocator.
