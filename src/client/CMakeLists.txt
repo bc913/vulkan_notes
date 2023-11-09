@@ -17,6 +17,7 @@ list(APPEND _SOURCE_FILES
 )
 target_sources(${PROJECT_NAME} PRIVATE ${_SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE glm glfw Vulkan::Headers volk::volk_headers)
+target_compile_definitions(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:DEBUG_MODE>)
 
 install(
     TARGETS ${PROJECT_NAME}

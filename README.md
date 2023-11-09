@@ -37,7 +37,9 @@
 > Whenever a device and/or instance is created, they should be destroyed as well in reverse order. 
 
 ### Validation
+Validation layers exists on the instance level. The device level validation layers are deprecated but still recommended to add for backwards compatibility of some devices. Validation layers are usually enabled with `DEBUG` builds. Most fundamental validation layer name is `VK_LAYER_KHRONOS_validation`. Initially, only using this layer would suffice.
 
+- DebugCallbacks are should be registered during instance creation and destroyed properly. It should be created after instance creation and destroyed before instance destroy.
 
 ### Extensions
 

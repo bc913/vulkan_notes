@@ -45,35 +45,78 @@ typedef struct QueueFamilyIndices
 static vulkan_context context;
 static main_device mainDevice;
 static VkQueue graphicsQueue;
+static VkDebugUtilsMessengerEXT debugMessenger;
+static PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback;
+static PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallback;
+
+#ifdef DEBUG_MODE
+static VkBool32 enable_validation_layers = VK_TRUE;
+#else
+static VkBool32 enable_validation_layers = VK_FALSE;
+#endif
+
+//--------------
+// Utils
+//--------------
+const char **append_strs_to_str_arr(const char **const source, size_t size, const char **const append, size_t append_size)
+{
+    if (source == NULL || !size || append == NULL || !append_size)
+        return NULL;
+
+    size_t total_size = size + append_size;
+    const char **dest = (const char **)(malloc(sizeof(char *) * total_size));
+    size_t i;
+    for (i = 0; i < total_size; ++i)
+    {
+        if (i < size)
+        {
+            dest[i] = strdup(source[i]);
+            // or
+            // size_t len = strlen(source[i]);
+            // dest[i] = (char *)(malloc(sizeof(char) * len + 1));
+            // dest[i] = strcpy(dest[i], source[i]);
+        }
+        else
+        {
+            dest[i] = strdup(append[i - size]);
+            // or
+            // size_t len = strlen(append[i]);
+            // dest[i] = (char *)(malloc(sizeof(char) * len + 1));
+            // dest[i] = strcpy(dest[i], append[i]);
+        }
+
+        // printf("dest[%zu]= %s\n", i, dest[i]);
+    }
+
+    return dest;
+}
 
 //--------------
 // Helpers
 //--------------
-VkBool32 is_valid_queue_family_indices(QueueFamilyIndices qfi)
-{
-    return qfi.graphicsFamily >= 0;
-}
 
+// Extension
+// ###############
 VkBool32 check_extensions(uint32_t check_count, const char **check_names,
                           uint32_t extension_count, VkExtensionProperties *extensions)
 {
     uint32_t i = 0, j;
     for (; i < check_count; ++i)
     {
-        VkBool32 found = 0;
+        VkBool32 found = VK_FALSE;
         for (j = 0; j < extension_count; ++j)
         {
             if (!strcmp(check_names[i], extensions[j].extensionName))
             {
-                found = 1;
+                found = VK_TRUE;
                 break;
             }
         }
 
-        if (!found)
+        if (found != VK_TRUE)
         {
             fprintf(stderr, "Can not find extension: %s\n", check_names[i]);
-            return 0;
+            return VK_FALSE;
         }
     }
 
@@ -92,9 +135,63 @@ VkBool32 check_instance_extension_support(uint32_t check_count, const char **che
     res = vkEnumerateInstanceExtensionProperties(NULL, &extensionCount, extensions);
     assert(!res);
 
-    return check_extensions(check_count, check_names, extensionCount, extensions);
+    VkBool32 b_res = check_extensions(check_count, check_names, extensionCount, extensions);
+    free(extensions);
+    return b_res;
 }
 
+// Valdiation
+// ###############
+
+VkBool32 check_validation_layers(uint32_t check_count, const char **check_names,
+                                 uint32_t layer_count, VkLayerProperties *layers)
+{
+    uint32_t i = 0, j;
+    for (; i < check_count; ++i)
+    {
+        VkBool32 found = VK_FALSE;
+        for (j = 0; j < layer_count; ++j)
+        {
+            if (!strcmp(check_names[i], layers[j].layerName))
+            {
+                found = VK_TRUE;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            fprintf(stderr, "Can not find validation layer: %s\n", check_names[i]);
+            return VK_FALSE;
+        }
+    }
+
+    return 1;
+}
+
+VkBool32 check_validation_support(uint32_t check_count, const char **check_names)
+{
+    VkResult res;
+    // Set the counter
+    uint32_t validation_layer_count;
+    res = vkEnumerateInstanceLayerProperties(&validation_layer_count, NULL);
+    assert(!res);
+
+    VkLayerProperties *validation_layers = (VkLayerProperties *)(malloc(sizeof(VkLayerProperties) * validation_layer_count));
+    res = vkEnumerateInstanceLayerProperties(&validation_layer_count, validation_layers);
+    assert(!res);
+
+    VkBool32 b_res = check_validation_layers(check_count, check_names, validation_layer_count, validation_layers);
+    free(validation_layers);
+    return b_res;
+}
+
+// Queue families
+// ###############
+VkBool32 is_valid_queue_family_indices(QueueFamilyIndices qfi)
+{
+    return qfi.graphicsFamily >= 0;
+}
 QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
 {
     QueueFamilyIndices indices;
@@ -130,6 +227,8 @@ QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
     return indices;
 }
 
+// DEvice
+// ###############
 VkBool32 check_device_suitable(VkPhysicalDevice device)
 {
     /*
@@ -146,8 +245,70 @@ VkBool32 check_device_suitable(VkPhysicalDevice device)
 }
 
 //--------------
+// Debug
+//--------------
+// The call is aborted if returns true;
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+    void *pUserData)
+{
+
+    if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        fprintf(stderr, pCallbackData->pMessage);
+
+    return VK_FALSE;
+}
+
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger)
+{
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != NULL)
+    {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    }
+    else
+    {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator)
+{
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != NULL)
+    {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
+
+//--------------
 // Private
 //--------------
+
+void populate_debug_messenger(VkDebugUtilsMessengerCreateInfoEXT *createInfo)
+{
+    *createInfo = {};
+    createInfo->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo->messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo->messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo->pfnUserCallback = debug_callback;
+    createInfo->pUserData = NULL;
+}
+
+void setup_debug_messenger()
+{
+    if (!enable_validation_layers)
+        return;
+
+    VkDebugUtilsMessengerCreateInfoEXT createInfo;
+    populate_debug_messenger(&createInfo);
+
+    if (CreateDebugUtilsMessengerEXT(context.instance, &createInfo, context.allocator, &debugMessenger) != VK_SUCCESS)
+        ERR_EXIT("Failed to setup debug messenger.\n", "setup_debug_messenger");
+}
+
 int init_volk()
 {
     /* This won't compile if the appropriate Vulkan platform define isn't set. */
@@ -183,6 +344,13 @@ int init_volk()
 
 void create_instance()
 {
+    const char **required_validation_layers = (const char **)(malloc(sizeof(char *) * 1));
+    required_validation_layers[0] = "VK_LAYER_KHRONOS_validation";
+    if (enable_validation_layers && !check_validation_support(1, required_validation_layers))
+        ERR_EXIT(
+            "Validation layers requested but not available!\n",
+            "vkCreateInstance Failure");
+
     // Information about the application itself
     // Most data here doesn't affect the program and is for developer convenience
     VkApplicationInfo appInfo = {};
@@ -198,6 +366,15 @@ void create_instance()
     uint32_t required_extension_count = 0;
     const char **required_extensions = NULL;
     required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
+
+    if (enable_validation_layers)
+    {
+        // doing c tricks to append string to array
+        const char *extra_extensions[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+        required_extensions = append_strs_to_str_arr(required_extensions, required_extension_count, extra_extensions, 1);
+        ++required_extension_count;
+    }
+
 // MoltenVK VK_ERROR_INCOMPATIBLE_DRIVER error:
 // Beginning with the 1.3.216 Vulkan SDK, the VK_KHR_PORTABILITY_subset extension is mandatory.
 #ifdef __APPLE__
@@ -230,9 +407,21 @@ void create_instance()
     // Extension info
     createInfo.enabledExtensionCount = required_extension_count;
     createInfo.ppEnabledExtensionNames = required_extensions;
-    // TODO: No validation layers at the moment
-    createInfo.enabledLayerCount = 0;
-    createInfo.ppEnabledLayerNames = NULL;
+
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+    if (!enable_validation_layers)
+    {
+        createInfo.enabledLayerCount = 0;
+        createInfo.ppEnabledLayerNames = NULL;
+    }
+    else
+    {
+        createInfo.enabledLayerCount = 1;
+        createInfo.ppEnabledLayerNames = required_validation_layers;
+
+        populate_debug_messenger(&debugCreateInfo);
+        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT *)&debugCreateInfo;
+    }
 
 #ifdef __APPLE__
     createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
@@ -341,6 +530,7 @@ int init_renderer()
         return EXIT_FAILURE;
 
     create_instance();
+    setup_debug_messenger();
     get_physical_device();
     create_logical_device();
 
@@ -349,6 +539,9 @@ int init_renderer()
 
 void cleanup_renderer()
 {
-    vkDestroyDevice(mainDevice.logical_device, NULL);
+    if (enable_validation_layers)
+        DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
+
+    vkDestroyDevice(mainDevice.logical_device, context.allocator);
     vkDestroyInstance(context.instance, context.allocator);
 }
