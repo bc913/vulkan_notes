@@ -22,18 +22,61 @@
 ## Vulkan
 ### Introduction
 - **Vulkan Instance**: It is used to access to Vulkan context. Once initialized rarely used throughout the rest of the program:
-- **Device**:
-    - **Physical Device**: The GPU itself. Holds memory and queues to process pipeline but can't be accessed directly. They can ONLY be `retrieved` and can NOT be created. Instance can iterate all the available physical devices.
-        - Memory: To allocate resources 
-        - Queues: Command queues (FIFO). Different types of queues. (Queue Families). There can be more than one family and each family can have one or multiple queues. There are four types of queues.
-            - `Graphics`: to process graphics commands
-            - `Compute`: To process compute shaders
-            - `Transfer`: Data transfer ops. i.e. copy some data within the GPU memory from one location to another
-        > When iterate over the available `Physical Devices` you need to check the device has the queue families you need for the app.
-    - **Logical Device**: An handle(interface) to the physical device. All the work is done through this.
-        - Most objects are created on this device
-        - Define queue families and number of queues on it
-        - Multiple logical device can point (reference) the same physical device
+
+### Device
+- **Physical Device**: The GPU itself. Holds memory and queues to process pipeline but can't be accessed directly. They can ONLY be `retrieved` and can NOT be created. Instance can iterate all the available physical devices.
+    - Memory: To allocate resources 
+    - Queues: Command queues (FIFO). Different types of queues. (Queue Families). There can be more than one family and each family can have one or multiple queues. There are four types of queues.
+        - `Graphics`: to process graphics commands
+        - `Compute`: To process compute shaders
+        - `Transfer`: Data transfer ops. i.e. copy some data within the GPU memory from one location to another
+    - When iterating over the `Physical Devices`, the most suitable device can be selected based on one or more criterias given below:
+        1. Queue family availability
+        2. Based on device props and features
+        ```cpp
+        bool isDeviceSuitable(VkPhysicalDevice device) {
+            VkPhysicalDeviceProperties deviceProperties;
+            VkPhysicalDeviceFeatures deviceFeatures;
+            vkGetPhysicalDeviceProperties(device, &deviceProperties);
+            vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+            // i.e. Only consider dedicated graphics cards with geometry shader support.
+            return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+                deviceFeatures.geometryShader;
+        }
+        ```
+        3. Score system based on requirements thus the physical device with the highest score can be picked but fall back to an integrated GPU if that's the only one.
+        ```cpp
+        int rateDeviceSuitability(VkPhysicalDevice device) {
+            ...
+
+            int score = 0;
+
+            // Discrete GPUs have a significant performance advantage
+            if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                score += 1000;
+            }
+
+            // Maximum possible size of textures affects graphics quality
+            score += deviceProperties.limits.maxImageDimension2D;
+
+            // Application can't function without geometry shaders
+            if (!deviceFeatures.geometryShader) {
+                return 0;
+            }
+
+            return score;
+        }
+        ```
+
+- **Queue Families**: Almost every operation in Vulkan requires commands to be submitted to a queue and we need to find which of those required are supported by the physical device.
+
+> The currently available drivers will only allow you to create a small number of queues for each queue family and you don't really need more than one. That's because you can create all of the command buffers on multiple threads and then submit them all at once on the main thread with a single low-overhead call.
+
+- **Logical Device**: An handle(interface) to the physical device. All the work is done through this.
+    - Most objects are created on this device
+    - Assign queue families supported by the physical device and number of queues on it
+    - Multiple logical device can point (reference) the same physical device
 > Whenever a device and/or instance is created, they should be destroyed as well in reverse order. 
 
 ### Validation
