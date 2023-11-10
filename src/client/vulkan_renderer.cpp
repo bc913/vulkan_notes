@@ -186,6 +186,19 @@ VkBool32 check_validation_support(uint32_t check_count, const char **check_names
     return b_res;
 }
 
+const char **get_required_validation_layers(uint32_t *count)
+{
+    const char **required_validation_layers = (const char **)(malloc(sizeof(char *) * 1));
+    required_validation_layers[0] = "VK_LAYER_KHRONOS_validation";
+    if (enable_validation_layers && !check_validation_support(1, required_validation_layers))
+        ERR_EXIT(
+            "Validation layers requested but not available!\n",
+            "vkCreateInstance Failure");
+
+    // WARNING: Count should be set manually
+    *count = 1;
+    return required_validation_layers;
+}
 // Queue families
 // ###############
 VkBool32 is_valid_queue_family_indices(QueueFamilyIndices qfi)
@@ -344,12 +357,8 @@ int init_volk()
 
 void create_instance()
 {
-    const char **required_validation_layers = (const char **)(malloc(sizeof(char *) * 1));
-    required_validation_layers[0] = "VK_LAYER_KHRONOS_validation";
-    if (enable_validation_layers && !check_validation_support(1, required_validation_layers))
-        ERR_EXIT(
-            "Validation layers requested but not available!\n",
-            "vkCreateInstance Failure");
+    uint32_t required_validation_count;
+    const char **required_validation_layers = get_required_validation_layers(&required_validation_count);
 
     // Information about the application itself
     // Most data here doesn't affect the program and is for developer convenience
@@ -413,10 +422,11 @@ void create_instance()
     {
         createInfo.enabledLayerCount = 0;
         createInfo.ppEnabledLayerNames = NULL;
+        createInfo.pNext = NULL;
     }
     else
     {
-        createInfo.enabledLayerCount = 1;
+        createInfo.enabledLayerCount = required_validation_count;
         createInfo.ppEnabledLayerNames = required_validation_layers;
 
         populate_debug_messenger(&debugCreateInfo);
@@ -483,6 +493,9 @@ void get_physical_device()
             break;
         }
     }
+
+    if (mainDevice.physical_device == VK_NULL_HANDLE)
+        ERR_EXIT("Failed to find a suitable GPU.\n", "get_physical_device");
 }
 
 void create_logical_device()
@@ -510,6 +523,19 @@ void create_logical_device()
     VkPhysicalDeviceFeatures deviceFeatures = {};
 
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures; // Physical Device features Logical Device will use
+
+    uint32_t required_validation_layers_count;
+    const char **required_validation_layers = get_required_validation_layers(&required_validation_layers_count);
+    if (enable_validation_layers)
+    {
+        deviceCreateInfo.enabledLayerCount = required_validation_layers_count;
+        deviceCreateInfo.ppEnabledLayerNames = required_validation_layers;
+    }
+    else
+    {
+        deviceCreateInfo.enabledLayerCount = 0;
+        deviceCreateInfo.ppEnabledLayerNames = NULL;
+    }
 
     // Create the logical device for the given physical device
     VkResult result = vkCreateDevice(mainDevice.physical_device, &deviceCreateInfo, nullptr, &mainDevice.logical_device);
