@@ -19,6 +19,8 @@
         - [Do I need the Vulkan SDK](https://doc.magnum.graphics/magnum/platforms-vk.html)
         - [Vulkan loader](https://github.com/KhronosGroup/Vulkan-Loader/blob/main/BUILD.md#building-on-windows)
 
+> You can run `vulkaninfo` or `vulkaninfo > <some_file_name>.txt` in cmd line to get your grpahics card information through Vulkand 
+
 ## Vulkan
 ### Introduction
 - **Vulkan Instance**: It is used to access to Vulkan context. Once initialized rarely used throughout the rest of the program:
