@@ -12,6 +12,7 @@
     "cmake.buildBeforeRun": false,
     "cmake.configureOnEdit": false,
     "cmake.configureOnOpen": false,
+    "cmake.options.statusBarVisibility": "visible",
     // Editor
     "editor.minimap.enabled": false,
     "editor.cursorStyle": "line",
