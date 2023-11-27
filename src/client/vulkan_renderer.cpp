@@ -676,6 +676,37 @@ void create_logical_device()
     free(unique_queue_families);
     free(queue_create_infos);
 }
+
+//--------------
+// Destroy
+//--------------
+void destroy_device(main_device *the_device)
+{
+    // Destroy logical device
+    vkDestroyDevice(the_device->logical_device, context.allocator);
+    the_device->logical_device = 0;
+
+    // Release physical device resources
+    the_device->physical_device = 0;
+
+    // Capabilities
+    if (the_device->swapchain_support.formats)
+    {
+        free(the_device->swapchain_support.formats);
+        the_device->swapchain_support.formats = NULL;
+        the_device->swapchain_support.format_count = 0;
+    }
+
+    if (the_device->swapchain_support.presentationModes)
+    {
+        free(the_device->swapchain_support.presentationModes);
+        the_device->swapchain_support.presentationModes = NULL;
+        the_device->swapchain_support.presentation_mode_count = 0;
+    }
+
+    memset(&the_device->swapchain_support.surfaceCapabilities, 0, sizeof(the_device->swapchain_support.surfaceCapabilities));
+}
+
 //--------------
 // Public
 //--------------
@@ -698,7 +729,7 @@ void cleanup_renderer()
     if (enable_validation_layers)
         DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
 
-    vkDestroyDevice(mainDevice.logical_device, context.allocator);
+    destroy_device(&mainDevice);
     vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);
     vkDestroyInstance(context.instance, context.allocator);
 }
