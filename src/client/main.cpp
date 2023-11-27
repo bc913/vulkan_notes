@@ -31,7 +31,7 @@ int main()
 {
     init_window();
 
-    if (init_renderer() == EXIT_FAILURE)
+    if (init_renderer(window) == EXIT_FAILURE)
         return EXIT_FAILURE;
 
     while (!glfwWindowShouldClose(window))

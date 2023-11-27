@@ -89,7 +89,68 @@ Validation layers exists on the instance level. The device level validation laye
 ### Extensions
 
 
-### Swapchain
+#### Surface:
+An interface between the surface backed by a windowing system and images(objects) to be displayed (front) in the swapchain. The surface should specifically be created for the windowing system we use. It requires `VK_KHR_surface` instance level extension.
+
+> Its usage is platform agnostic but creation is not so we need some platform information. However if you use glfw, you don't need to use platform specific info for creation too.
+
+Follow this [link](https://www.intel.com/content/www/us/en/developer/articles/training/api-without-secrets-introduction-to-vulkan-part-2.html) to use platform specific info for surface creation. 
+
+Since it is specific to the windowing system, it requires some platform-specific attention to create it. Thanks to `GLFW`, `glfwCreateWindowSurface()` method generates the surface we need in a platform specific way.
+
+> In order to present the image in the swapchain to the surface, a queue is required to handle present operations. This is `Presentation queue`. It is not like the other queues but it has some required features as `Graphics queue`. 
+> Usually, the `Presentation` and `Graphics` queues  will usually be the same queue. 
+
+- Usage:
+```cpp
+static VkSurfaceKHR surface;
+
+// Make sure VK_KHR_surface instance level extension is supported during instance creation
+const char **required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
+
+// Logical device should also support for surfaces
+// We don't need to check the extension directly on the device level.
+// Just check if the logical devices supports a queue type (Presentation) which the surface requires
+// Which is usually the same as the Graphics queue
+// Store queue infos
+VkDeviceQueueCreateInfo *queue_create_infos = (VkDeviceQueueCreateInfo *)(malloc(sizeof(VkDeviceQueueCreateInfo) * indices_count));
+{
+    float priority = 1.0f;
+    size_t i;
+    for (i = 0; i < indices_count; ++i)
+    {
+        // Queue the logical device needs to create and info to do so (Only 1 for now, will add more later!)
+        VkDeviceQueueCreateInfo queueCreateInfo = {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = unique_queue_families[i]; // The index of the family to create a queue from
+        queueCreateInfo.queueCount = 1;                              // Number of queues to create
+        queueCreateInfo.pQueuePriorities = &priority;                // Vulkan needs to know how to handle multiple queues, so decide priority (1 = highest priority)
+        queue_create_infos[i] = queueCreateInfo;
+    }
+}
+
+// This is to  make sure that our logical device actually supports presenting to a surface
+
+// Pass that info to the logical device
+// Information to create logical device (sometimes called "device")
+VkDeviceCreateInfo deviceCreateInfo = {};
+deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+deviceCreateInfo.queueCreateInfoCount = indices_count;   // Number of Queue Create Infos (number of queues)
+deviceCreateInfo.pQueueCreateInfos = queue_create_infos; // List of queue create infos so device can create required queues
+VkResult result = vkCreateDevice(mainDevice.physical_device, &deviceCreateInfo, nullptr, &mainDevice.logical_device);
+
+// Create Surface
+void create_surface(GLFWwindow *window)
+{
+    if (glfwCreateWindowSurface(context.instance, window, context.allocator, &surface) != VK_SUCCESS)
+        ERR_EXIT(
+            "Failed to create window surface.\n",
+            "glfwCreateWindowSurface() Failure");
+}
+
+// Destroy in reverse order so before destroy instance
+vkDestroySurfaceKHR(context.instance, surface, context.allocator);
+```
 
 ## References
 ### General

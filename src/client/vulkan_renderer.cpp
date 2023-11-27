@@ -39,12 +39,16 @@ typedef struct main_device
 // Indices (locations) of Queue Families (if they exist at all)
 typedef struct QueueFamilyIndices
 {
-    int graphicsFamily = -1; // Location of Graphics Queue Family
+    int graphicsFamily = -1;     // Location of Graphics Queue Family
+    int presentationFamily = -1; // Location of the presentation queue family
 } QueueFamilyIndices;
 
 static vulkan_context context;
 static main_device mainDevice;
 static VkQueue graphicsQueue;
+static VkQueue presentQueue;
+static VkSurfaceKHR surface;
+
 static VkDebugUtilsMessengerEXT debugMessenger;
 static PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback;
 static PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallback;
@@ -203,7 +207,7 @@ const char **get_required_validation_layers(uint32_t *count)
 // ###############
 VkBool32 is_valid_queue_family_indices(QueueFamilyIndices qfi)
 {
-    return qfi.graphicsFamily >= 0;
+    return qfi.graphicsFamily >= 0 && qfi.presentationFamily >= 0;
 }
 QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
 {
@@ -231,6 +235,13 @@ QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
         // Queue can be multiple types defined through bitfield. Need to bitwise AND with VK_QUEUE_*_BIT to check if has required type
         if (queue_families[i].queueCount > 0 && queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
             indices.graphicsFamily = i;
+
+        // Check if Queue Family supports presentation
+        VkBool32 presentation_support = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentation_support);
+        // Check if queue is presentation type (can be both graphics and presentation)
+        if (queue_families[i].queueCount > 0 && presentation_support)
+            indices.presentationFamily = i;
 
         // Check if queue family indices are in a valid state, stop searching if so
         if (is_valid_queue_family_indices(indices))
@@ -322,6 +333,17 @@ void setup_debug_messenger()
         ERR_EXIT("Failed to setup debug messenger.\n", "setup_debug_messenger");
 }
 
+//--------------
+// Swapchain - Surface
+//--------------
+void create_surface(GLFWwindow *window)
+{
+    if (glfwCreateWindowSurface(context.instance, window, context.allocator, &surface) != VK_SUCCESS)
+        ERR_EXIT(
+            "Failed to create window surface.\n",
+            "glfwCreateWindowSurface() Failure");
+}
+
 int init_volk()
 {
     /* This won't compile if the appropriate Vulkan platform define isn't set. */
@@ -375,6 +397,7 @@ void create_instance()
     uint32_t required_extension_count = 0;
     const char **required_extensions = NULL;
     required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
+    // This list already includes VK_KHR_surface extension for surface
 
     if (enable_validation_layers)
     {
@@ -503,21 +526,44 @@ void create_logical_device()
     // Get the queue family indices for the chosen Physical Device
     QueueFamilyIndices indices = get_queue_families(mainDevice.physical_device);
 
-    // Queue the logical device needs to create and info to do so (Only 1 for now, will add more later!)
-    VkDeviceQueueCreateInfo queueCreateInfo = {};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily; // The index of the family to create a queue from
-    queueCreateInfo.queueCount = 1;                            // Number of queues to create
-    float priority = 1.0f;
-    queueCreateInfo.pQueuePriorities = &priority; // Vulkan needs to know how to handle multiple queues, so decide priority (1 = highest priority)
+    // For each indices, it requires a queue ->std::unordered_set can be used here
+    // No duplicate indices should be alive
+    // TODO: We don't have hash_set impl yet so use this manual approach
+    size_t indices_count = indices.graphicsFamily == indices.presentationFamily ? 1 : 2;
+
+    int *unique_queue_families = (int *)(malloc(sizeof(int) * indices_count));
+    if (indices_count == 1)
+        unique_queue_families[0] = indices.graphicsFamily;
+    else if (indices_count == 2)
+    {
+        unique_queue_families[0] = indices.graphicsFamily;
+        unique_queue_families[1] = indices.presentationFamily;
+    }
+
+    // Store queue infos
+    VkDeviceQueueCreateInfo *queue_create_infos = (VkDeviceQueueCreateInfo *)(malloc(sizeof(VkDeviceQueueCreateInfo) * indices_count));
+    {
+        float priority = 1.0f;
+        size_t i;
+        for (i = 0; i < indices_count; ++i)
+        {
+            // Queue the logical device needs to create and info to do so (Only 1 for now, will add more later!)
+            VkDeviceQueueCreateInfo queueCreateInfo = {};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = unique_queue_families[i]; // The index of the family to create a queue from
+            queueCreateInfo.queueCount = 1;                              // Number of queues to create
+            queueCreateInfo.pQueuePriorities = &priority;                // Vulkan needs to know how to handle multiple queues, so decide priority (1 = highest priority)
+            queue_create_infos[i] = queueCreateInfo;
+        }
+    }
 
     // Information to create logical device (sometimes called "device")
     VkDeviceCreateInfo deviceCreateInfo = {};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = 1;             // Number of Queue Create Infos (number of queues)
-    deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo; // List of queue create infos so device can create required queues
-    deviceCreateInfo.enabledExtensionCount = 0;            // Number of enabled logical device extensions
-    deviceCreateInfo.ppEnabledExtensionNames = nullptr;    // List of enabled logical device extensions
+    deviceCreateInfo.queueCreateInfoCount = indices_count;   // Number of Queue Create Infos (number of queues)
+    deviceCreateInfo.pQueueCreateInfos = queue_create_infos; // List of queue create infos so device can create required queues
+    deviceCreateInfo.enabledExtensionCount = 0;              // Number of enabled logical device extensions
+    deviceCreateInfo.ppEnabledExtensionNames = nullptr;      // List of enabled logical device extensions
 
     // Physical Device Features the Logical Device will be using
     VkPhysicalDeviceFeatures deviceFeatures = {};
@@ -546,17 +592,22 @@ void create_logical_device()
     // So we want handle to queues
     // From given logical device, of given Queue Family, of given Queue Index (0 since only one queue), place reference in given VkQueue
     vkGetDeviceQueue(mainDevice.logical_device, indices.graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(mainDevice.logical_device, indices.presentationFamily, 0, &presentQueue);
+
+    free(unique_queue_families);
+    free(queue_create_infos);
 }
 //--------------
 // Public
 //--------------
-int init_renderer()
+int init_renderer(GLFWwindow *window)
 {
     if (init_volk() == EXIT_FAILURE)
         return EXIT_FAILURE;
 
     create_instance();
     setup_debug_messenger();
+    create_surface(window);
     get_physical_device();
     create_logical_device();
 
@@ -569,5 +620,6 @@ void cleanup_renderer()
         DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
 
     vkDestroyDevice(mainDevice.logical_device, context.allocator);
+    vkDestroySurfaceKHR(context.instance, surface, context.allocator);
     vkDestroyInstance(context.instance, context.allocator);
 }
