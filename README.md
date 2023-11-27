@@ -89,6 +89,117 @@ Validation layers exists on the instance level. The device level validation laye
 ### Extensions
 
 
+### Presentation
+- Displaying images in Vulkan is not supported by default. WSI (Window system integration) extensions should be enabled before.
+Some brief explanation: Swapchain will generate and store some image (data) and it has to present these images (data) onto the platform agnostic `VkSurfaceKHR` surface which is backed by the windowing system and acts such an interface. GLFW will be reading from this surface.
+#### Swapchain
+It is a group of images (data) that can be drawn to and presented to surface. `Swapchain` is a complex object that handles the retrieval and updating the data of the image(s) being displayed or yet to be displayed. It does NOT display the image. It only handles the data about it. It requires `VK_KHR_swapchain` extension which is device level extension.
+
+> GLFW is already providing that extensions using `glfwGetRequiredInstanceExtensions()` method.
+
+- How it works?:
+You should query to the swapchain: `Hey swapchain, do you have new image (data) to be drawn?`. If yes, draw the image and tell swapchain to queue it up to the presentation queue to be presented on the surface. It requires some synchronizations:
+1.  If we ask a new image, we don't want to present that image before it's drawing is completed.
+2. ???
+
+```cpp
+static const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+static uint32_t requested_device_ext_count = 1;
+
+// Since, it is a physical device feature and not supported by all available hardware
+// Check for the swap chain support on the physical device
+VkBool32 check_device_extension_support(VkPhysicalDevice device)
+{
+    // Get the count
+    uint32_t extension_count;
+    VkResult res = vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
+    if (res != VK_SUCCESS || !extension_count)
+        return VK_FALSE;
+
+    // Get extensions
+    VkExtensionProperties *extensions = (VkExtensionProperties *)(malloc(sizeof(VkExtensionProperties) * extension_count));
+    res = vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, extensions);
+    // assert(res == VK_SUCCESS)
+
+    // Specify required device extensions here
+    uint32_t requested_device_ext_count = 1;
+    const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    VkBool32 result = check_extensions(requested_device_ext_count, requested_device_extensions, extension_count, extensions);
+
+    free(extensions);
+    return result;
+}
+// Enable extension at the logical device level
+deviceCreateInfo.enabledExtensionCount = requested_device_ext_count;    // Number of enabled logical device extensions
+deviceCreateInfo.ppEnabledExtensionNames = requested_device_extensions;
+
+// Query details of swap chain support
+/*
+Just checking if a swap chain is available is not sufficient, because it may not actually be compatible with our window surface.
+*/
+
+SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
+{
+    SwapChainDetails details;
+
+    // Get the surface capabilities for the given surface on the given physical device
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.surfaceCapabilities);
+
+    // formats
+    uint32_t formats_count;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formats_count, NULL);
+    if (formats_count)
+    {
+        details.format_count = formats_count;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formats_count, details.formats);
+    }
+
+    // Presentation modes
+    uint32_t presentation_modes_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentation_modes_count, NULL);
+    if (presentation_modes_count)
+    {
+        details.presentation_mode_count = presentation_modes_count;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentation_modes_count, details.presentationModes);
+    }
+
+    return details;
+}
+
+// For some reason it might be possible that any surface capability or format is not supported
+// so we have to check if our device supports these
+
+VkBool32 check_device_suitable(VkPhysicalDevice device, SwapChainDetails *details)
+{
+    // Check extensions
+    VkBool32 extensions_supported = check_device_extension_support(device);
+
+    // Check swapchain capabilities
+    VkBool32 swap_chain_adequate = VK_FALSE;
+    if (extensions_supported)
+    {
+        *details = get_swap_chain_details(device);
+        swap_chain_adequate = details->format_count && details->presentation_mode_count;
+    }
+
+    return is_valid_queue_family_indices(get_queue_families(device)) && extensions_supported && swap_chain_adequate;
+}
+```
+
+Swapchain is based on Surface so first Surface query might be done before. Swapchain has 3 major parts:
+- Surface Capabilities:
+- Surface Format:
+- [Presentation Mode](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPresentModeKHR.html): It is a concept about the order and timing of images being presented to the Surface. At any time, there can be ONLY 1 image present at the surface.
+
+- How monitors work?
+Monitors start drawing from top-left pixel as row-by-row until reaches bottom-right corner. When the image completes, the screen is then cleared to start drawing again. The period of time AFTER this clear and BEFORE it starts drawing again is called as `Vertical Blank Interval` or `Vertical Blank`. This is usually the best time to replace the image.
+
+- What is tearing?
+When an image is being drawn to the screen, if another image is started to being drawn to the screen it is tearing.
+
+- Images and Image Views:
+When Swapchain is created, it will automatically create a set of images to be
+
 #### Surface:
 An interface between the surface backed by a windowing system and images(objects) to be displayed (front) in the swapchain. The surface should specifically be created for the windowing system we use. It requires `VK_KHR_surface` instance level extension.
 
@@ -158,12 +269,15 @@ vkDestroySurfaceKHR(context.instance, surface, context.allocator);
 
 - [Using Vulkan Hpp, The C++ Header for Vulkan](https://www.youtube.com/watch?v=KFsbrhcqW2U)
 
+- [Intel - API Without Secrets to Vulkan](https://www.intel.com/content/www/us/en/developer/articles/training/api-without-secrets-introduction-to-vulkan-part-1.html)
+
 ### Dev Environment
 - [Vulkan SDK for CI/CD](https://www.reddit.com/r/vulkan/comments/h9exvb/vulkansdk_for_ci/)
 - [Vulkan Tutorial - Development Environment](https://vulkan-tutorial.com/Development_environment)
 
 ### Repositories
 - [KhronosGroup/VulkanSamples](https://github.com/KhronosGroup/Vulkan-Samples)
+- [Intel -> GameTechDev/IntroductionToVulkan](https://github.com/GameTechDev/IntroductionToVulkan)
 - [googlesamples/vulkan-basic-samples](https://github.com/googlesamples/vulkan-basic-samples)
 - [volk - meta-loader for Vulkan](https://github.com/zeux/volk)
 - [krOoze/Hello_Triangle](https://github.com/krOoze/Hello_Triangle)
