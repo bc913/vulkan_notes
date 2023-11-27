@@ -23,11 +23,7 @@
 //--------------
 // Definitions
 //--------------
-typedef struct vulkan_context
-{
-    VkInstance instance;
-    VkAllocationCallbacks *allocator;
-} vulkan_context;
+
 
 typedef struct main_device
 {
@@ -35,6 +31,13 @@ typedef struct main_device
     VkDevice logical_device;
 
 } main_device;
+
+typedef struct vulkan_context
+{
+    VkInstance instance;
+    VkAllocationCallbacks *allocator;
+    VkSurfaceKHR surface;
+} vulkan_context;
 
 // Indices (locations) of Queue Families (if they exist at all)
 typedef struct QueueFamilyIndices
@@ -238,7 +241,7 @@ QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
 
         // Check if Queue Family supports presentation
         VkBool32 presentation_support = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentation_support);
+        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, context.surface, &presentation_support);
         // Check if queue is presentation type (can be both graphics and presentation)
         if (queue_families[i].queueCount > 0 && presentation_support)
             indices.presentationFamily = i;
@@ -334,15 +337,8 @@ void setup_debug_messenger()
 }
 
 //--------------
-// Swapchain - Surface
+// Create
 //--------------
-void create_surface(GLFWwindow *window)
-{
-    if (glfwCreateWindowSurface(context.instance, window, context.allocator, &surface) != VK_SUCCESS)
-        ERR_EXIT(
-            "Failed to create window surface.\n",
-            "glfwCreateWindowSurface() Failure");
-}
 
 int init_volk()
 {
@@ -375,6 +371,14 @@ int init_volk()
            VK_VERSION_PATCH(version));
 
     return EXIT_SUCCESS;
+}
+
+void create_surface(GLFWwindow *window)
+{
+    if (glfwCreateWindowSurface(context.instance, window, context.allocator, &context.surface) != VK_SUCCESS)
+        ERR_EXIT(
+            "Failed to create window surface.\n",
+            "glfwCreateWindowSurface() Failure");
 }
 
 void create_instance()
@@ -620,6 +624,6 @@ void cleanup_renderer()
         DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
 
     vkDestroyDevice(mainDevice.logical_device, context.allocator);
-    vkDestroySurfaceKHR(context.instance, surface, context.allocator);
+    vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);
     vkDestroyInstance(context.instance, context.allocator);
 }
