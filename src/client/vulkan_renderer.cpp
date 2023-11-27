@@ -24,12 +24,21 @@
 // Definitions
 //--------------
 
+typedef struct SwapChainDetails
+{
+    VkSurfaceCapabilitiesKHR surfaceCapabilities; // Surface properties, e.g. image size/extent
+    uint32_t format_count;
+    VkSurfaceFormatKHR *formats; // Surface image formats, e.g. RGBA and size of each colour
+
+    uint32_t presentation_mode_count;
+    VkPresentModeKHR *presentationModes; // How images should be presented to screen
+} SwapChainDetails;
 
 typedef struct main_device
 {
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
-
+    SwapChainDetails swapchain_support;
 } main_device;
 
 typedef struct vulkan_context
@@ -50,8 +59,12 @@ static vulkan_context context;
 static main_device mainDevice;
 static VkQueue graphicsQueue;
 static VkQueue presentQueue;
-static VkSurfaceKHR surface;
 
+// Extensions
+static const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+static uint32_t requested_device_ext_count = 1;
+
+// Debug
 static VkDebugUtilsMessengerEXT debugMessenger;
 static PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback;
 static PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallback;
@@ -127,7 +140,7 @@ VkBool32 check_extensions(uint32_t check_count, const char **check_names,
         }
     }
 
-    return 1;
+    return VK_TRUE;
 }
 
 VkBool32 check_instance_extension_support(uint32_t check_count, const char **check_names)
@@ -145,6 +158,26 @@ VkBool32 check_instance_extension_support(uint32_t check_count, const char **che
     VkBool32 b_res = check_extensions(check_count, check_names, extensionCount, extensions);
     free(extensions);
     return b_res;
+}
+
+VkBool32 check_device_extension_support(VkPhysicalDevice device)
+{
+    // Get the count
+    uint32_t extension_count;
+    VkResult res = vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
+    if (res != VK_SUCCESS || !extension_count)
+        return VK_FALSE;
+
+    // Get extensions
+    VkExtensionProperties *extensions = (VkExtensionProperties *)(malloc(sizeof(VkExtensionProperties) * extension_count));
+    res = vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, extensions);
+    // assert(res == VK_SUCCESS)
+
+    // Specify required device extensions here
+    VkBool32 result = check_extensions(requested_device_ext_count, requested_device_extensions, extension_count, extensions);
+
+    free(extensions);
+    return result;
 }
 
 // Valdiation
@@ -206,6 +239,7 @@ const char **get_required_validation_layers(uint32_t *count)
     *count = 1;
     return required_validation_layers;
 }
+
 // Queue families
 // ###############
 VkBool32 is_valid_queue_family_indices(QueueFamilyIndices qfi)
@@ -254,9 +288,43 @@ QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
     return indices;
 }
 
+// Swap-chain - surface
+// ###############
+
+SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
+{
+    SwapChainDetails details;
+
+    // Get the surface capabilities for the given surface on the given physical device
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, context.surface, &details.surfaceCapabilities);
+
+    // formats
+    uint32_t formats_count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, context.surface, &formats_count, NULL);
+    if (formats_count)
+    {
+        details.format_count = formats_count;
+        details.formats = (VkSurfaceFormatKHR *)(malloc(sizeof(VkSurfaceFormatKHR) * formats_count));
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, context.surface, &formats_count, details.formats);
+    }
+
+    // Presentation modes
+    uint32_t presentation_modes_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, context.surface, &presentation_modes_count, NULL);
+    if (presentation_modes_count)
+    {
+        details.presentation_mode_count = presentation_modes_count;
+        details.presentationModes = (VkPresentModeKHR *)(malloc(sizeof(VkSurfaceFormatKHR) * presentation_modes_count));
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, context.surface, &presentation_modes_count, details.presentationModes);
+    }
+
+    return details;
+}
+
 // DEvice
 // ###############
-VkBool32 check_device_suitable(VkPhysicalDevice device)
+
+VkBool32 check_device_suitable(VkPhysicalDevice device, SwapChainDetails *details)
 {
     /*
     // Information about the device itself (ID, name, type, vendor, etc)
@@ -268,7 +336,18 @@ VkBool32 check_device_suitable(VkPhysicalDevice device)
     vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
     */
 
-    return is_valid_queue_family_indices(get_queue_families(device));
+    // Check extensions
+    VkBool32 extensions_supported = check_device_extension_support(device);
+
+    // Check swapchain capabilities
+    VkBool32 swap_chain_adequate = VK_FALSE;
+    if (extensions_supported)
+    {
+        *details = get_swap_chain_details(device);
+        swap_chain_adequate = details->format_count && details->presentation_mode_count;
+    }
+
+    return is_valid_queue_family_indices(get_queue_families(device)) && extensions_supported && swap_chain_adequate;
 }
 
 //--------------
@@ -309,10 +388,6 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
         func(instance, debugMessenger, pAllocator);
     }
 }
-
-//--------------
-// Private
-//--------------
 
 void populate_debug_messenger(VkDebugUtilsMessengerCreateInfoEXT *createInfo)
 {
@@ -514,7 +589,7 @@ void get_physical_device()
 
     for (uint32_t i = 0; i < device_count; i++)
     {
-        if (check_device_suitable(physical_devices[i]))
+        if (check_device_suitable(physical_devices[i], &mainDevice.swapchain_support))
         {
             mainDevice.physical_device = physical_devices[i];
             break;
@@ -564,10 +639,10 @@ void create_logical_device()
     // Information to create logical device (sometimes called "device")
     VkDeviceCreateInfo deviceCreateInfo = {};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = indices_count;   // Number of Queue Create Infos (number of queues)
-    deviceCreateInfo.pQueueCreateInfos = queue_create_infos; // List of queue create infos so device can create required queues
-    deviceCreateInfo.enabledExtensionCount = 0;              // Number of enabled logical device extensions
-    deviceCreateInfo.ppEnabledExtensionNames = nullptr;      // List of enabled logical device extensions
+    deviceCreateInfo.queueCreateInfoCount = indices_count;                  // Number of Queue Create Infos (number of queues)
+    deviceCreateInfo.pQueueCreateInfos = queue_create_infos;                // List of queue create infos so device can create required queues
+    deviceCreateInfo.enabledExtensionCount = requested_device_ext_count;    // Number of enabled logical device extensions
+    deviceCreateInfo.ppEnabledExtensionNames = requested_device_extensions; // List of enabled logical device extensions
 
     // Physical Device Features the Logical Device will be using
     VkPhysicalDeviceFeatures deviceFeatures = {};
