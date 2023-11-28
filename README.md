@@ -184,6 +184,10 @@ VkBool32 check_device_suitable(VkPhysicalDevice device, SwapChainDetails *detail
 
     return is_valid_queue_family_indices(get_queue_families(device)) && extensions_supported && swap_chain_adequate;
 }
+
+// OPTIONAL
+// Choosing the right settings for the swap chain
+
 ```
 
 Swapchain is based on Surface so first Surface query might be done before. Swapchain has 3 major parts:
