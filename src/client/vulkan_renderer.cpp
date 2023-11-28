@@ -1,5 +1,6 @@
 #include "vulkan_renderer.h"
 #include "log_assert.h"
+#include "utils.h"
 // Should come before includes
 #if defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
