@@ -50,6 +50,9 @@ typedef struct main_device
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
     SwapChainDetails swapchain_support;
+
+    VkQueue graphicsQueue;
+    VkQueue presentQueue;
 } main_device;
 
 typedef struct vulkan_context
@@ -69,8 +72,6 @@ typedef struct QueueFamilyIndices
 } QueueFamilyIndices;
 
 static vulkan_context context;
-static VkQueue graphicsQueue;
-static VkQueue presentQueue;
 
 // Extensions
 static const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -740,8 +741,8 @@ void create_logical_device()
     // Queues are created at the same time as the device...
     // So we want handle to queues
     // From given logical device, of given Queue Family, of given Queue Index (0 since only one queue), place reference in given VkQueue
-    vkGetDeviceQueue(context.device.logical_device, indices.graphicsFamily, 0, &graphicsQueue);
-    vkGetDeviceQueue(context.device.logical_device, indices.presentationFamily, 0, &presentQueue);
+    vkGetDeviceQueue(context.device.logical_device, indices.graphicsFamily, 0, &context.device.graphicsQueue);
+    vkGetDeviceQueue(context.device.logical_device, indices.presentationFamily, 0, &context.device.presentQueue);
 
     free(unique_queue_families);
     free(queue_create_infos);
@@ -828,6 +829,9 @@ void create_swap_chain(GLFWwindow *window)
 //--------------
 void destroy_device(main_device *the_device)
 {
+    context.device.graphicsQueue = 0;
+    context.device.presentQueue = 0;
+
     // Destroy logical device
     vkDestroyDevice(the_device->logical_device, context.allocator);
     the_device->logical_device = 0;
