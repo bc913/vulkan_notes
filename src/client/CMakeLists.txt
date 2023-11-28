@@ -14,6 +14,8 @@ list(APPEND _SOURCE_FILES
             vulkan_renderer.cpp
             defines.h
             log_assert.h
+            utils.h
+            utils.cpp
 )
 target_sources(${PROJECT_NAME} PRIVATE ${_SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE glm glfw Vulkan::Headers volk::volk_headers)
