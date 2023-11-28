@@ -1,6 +1,7 @@
 #include "vulkan_renderer.h"
 #include "log_assert.h"
 #include "utils.h"
+
 // Should come before includes
 #if defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -20,6 +21,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdint.h>
 
 //--------------
 // Definitions
@@ -35,6 +37,14 @@ typedef struct SwapChainDetails
     VkPresentModeKHR *presentationModes; // How images should be presented to screen
 } SwapChainDetails;
 
+typedef struct vulkan_swapchain
+{
+    VkSurfaceFormatKHR surface_format;
+    VkSwapchainKHR handle;
+    VkImage *images;
+    VkImageView *views;
+} vulkan_swapchain;
+
 typedef struct main_device
 {
     VkPhysicalDevice physical_device;
@@ -47,6 +57,8 @@ typedef struct vulkan_context
     VkInstance instance;
     VkAllocationCallbacks *allocator;
     VkSurfaceKHR surface;
+    vulkan_swapchain swap_chain;
+    main_device device;
 } vulkan_context;
 
 // Indices (locations) of Queue Families (if they exist at all)
@@ -57,7 +69,6 @@ typedef struct QueueFamilyIndices
 } QueueFamilyIndices;
 
 static vulkan_context context;
-static main_device mainDevice;
 static VkQueue graphicsQueue;
 static VkQueue presentQueue;
 
@@ -181,7 +192,7 @@ VkBool32 check_device_extension_support(VkPhysicalDevice device)
     return result;
 }
 
-// Valdiation
+// Validation
 // ###############
 
 VkBool32 check_validation_layers(uint32_t check_count, const char **check_names,
@@ -291,7 +302,6 @@ QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
 
 // Swap-chain - surface
 // ###############
-
 SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
 {
     SwapChainDetails details;
@@ -320,6 +330,65 @@ SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
     }
 
     return details;
+}
+
+// Best format is subjective, but ours will be:
+// format		:	VK_FORMAT_R8G8B8A8_UNORM (VK_FORMAT_B8G8R8A8_UNORM as backup)
+// colorSpace	:	VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+VkSurfaceFormatKHR choose_best_surface_format(VkSurfaceFormatKHR *formats, uint32_t formats_count)
+{
+    // If only 1 format available and is undefined, then this means ALL formats are available (no restrictions)
+    if (formats == NULL || !formats_count || (formats_count == 1 && formats[0].format == VK_FORMAT_UNDEFINED))
+    {
+        return {VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+    }
+
+    // If restricted, search for optimal format
+    uint32_t i;
+    for (i = 0; i < formats_count; ++i)
+    {
+        if ((formats[i].format == VK_FORMAT_R8G8B8A8_UNORM || formats[i].format == VK_FORMAT_B8G8R8A8_UNORM || formats[i].format == VK_FORMAT_B8G8R8A8_SRGB) && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            return formats[i];
+    }
+
+    // If can't find optimal format, then just return first format
+    return formats[0];
+}
+
+VkPresentModeKHR choose_best_presentation_mode(VkPresentModeKHR *presentation_modes, uint32_t presentation_modes_count)
+{
+    if (presentation_modes == NULL || !presentation_modes_count)
+        return VK_PRESENT_MODE_FIFO_KHR;
+
+    uint32_t i;
+    for (i = 0; i < presentation_modes_count; ++i)
+    {
+        if (presentation_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+            return presentation_modes[i];
+    }
+
+    // If can't find, use FIFO as Vulkan spec says it must be present
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D choose_swap_extent(GLFWwindow *window, VkSurfaceCapabilitiesKHR *surface_capabilities)
+{
+    if (surface_capabilities->currentExtent.width != UINT32_MAX)
+        return surface_capabilities->currentExtent;
+
+    // Vulkan works with pixels so we need resolution in pixels
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height); // in pixels
+
+    VkExtent2D actual_extent = {};
+    actual_extent.width = (uint32_t)width;
+    actual_extent.height = (uint32_t)height;
+
+    // Surface also defines max and min, so make sure within boundaries by clamping value
+    actual_extent.width = clamp(actual_extent.width, surface_capabilities->minImageExtent.width, surface_capabilities->maxImageExtent.width);
+    actual_extent.height = clamp(actual_extent.height, surface_capabilities->minImageExtent.height, surface_capabilities->maxImageExtent.height);
+
+    return actual_extent;
 }
 
 // DEvice
@@ -590,21 +659,21 @@ void get_physical_device()
 
     for (uint32_t i = 0; i < device_count; i++)
     {
-        if (check_device_suitable(physical_devices[i], &mainDevice.swapchain_support))
+        if (check_device_suitable(physical_devices[i], &context.device.swapchain_support))
         {
-            mainDevice.physical_device = physical_devices[i];
+            context.device.physical_device = physical_devices[i];
             break;
         }
     }
 
-    if (mainDevice.physical_device == VK_NULL_HANDLE)
+    if (context.device.physical_device == VK_NULL_HANDLE)
         ERR_EXIT("Failed to find a suitable GPU.\n", "get_physical_device");
 }
 
 void create_logical_device()
 {
     // Get the queue family indices for the chosen Physical Device
-    QueueFamilyIndices indices = get_queue_families(mainDevice.physical_device);
+    QueueFamilyIndices indices = get_queue_families(context.device.physical_device);
 
     // For each indices, it requires a queue ->std::unordered_set can be used here
     // No duplicate indices should be alive
@@ -664,20 +733,96 @@ void create_logical_device()
     }
 
     // Create the logical device for the given physical device
-    VkResult result = vkCreateDevice(mainDevice.physical_device, &deviceCreateInfo, nullptr, &mainDevice.logical_device);
+    VkResult result = vkCreateDevice(context.device.physical_device, &deviceCreateInfo, nullptr, &context.device.logical_device);
     if (result != VK_SUCCESS)
         ERR_EXIT("Failed to create a Logical Device!\n", "create_logical_device");
 
     // Queues are created at the same time as the device...
     // So we want handle to queues
     // From given logical device, of given Queue Family, of given Queue Index (0 since only one queue), place reference in given VkQueue
-    vkGetDeviceQueue(mainDevice.logical_device, indices.graphicsFamily, 0, &graphicsQueue);
-    vkGetDeviceQueue(mainDevice.logical_device, indices.presentationFamily, 0, &presentQueue);
+    vkGetDeviceQueue(context.device.logical_device, indices.graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(context.device.logical_device, indices.presentationFamily, 0, &presentQueue);
 
     free(unique_queue_families);
     free(queue_create_infos);
 }
 
+void create_swap_chain(GLFWwindow *window)
+{
+    SwapChainDetails details = get_swap_chain_details(context.device.physical_device);
+
+    // Choose the best values for the swap chain
+    context.swap_chain.surface_format = choose_best_surface_format(details.formats, details.format_count);
+    VkPresentModeKHR presentation_mode = choose_best_presentation_mode(details.presentationModes, details.presentation_mode_count);
+    VkExtent2D extent = choose_swap_extent(window, &details.surfaceCapabilities);
+
+    // How many images to store in the swap chain?
+    /*
+    However, simply sticking to this minimum means that we may sometimes have to wait on the driver to
+    complete internal operations before we can acquire another image to render to.
+    Therefore it is recommended to request at least one more image than the minimum:
+    */
+    uint32_t image_count = details.surfaceCapabilities.minImageCount + 1;
+    // Zero has special meaning and make sure it is not greater than  the allowed max
+    if (details.surfaceCapabilities.maxImageCount > 0 && image_count > details.surfaceCapabilities.maxImageCount)
+        image_count = details.surfaceCapabilities.maxImageCount;
+
+    // Creation information for swap chain
+    VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
+    swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapChainCreateInfo.surface = context.surface;                                      // Swapchain surface
+    swapChainCreateInfo.imageFormat = context.swap_chain.surface_format.format;         // Swapchain format
+    swapChainCreateInfo.imageColorSpace = context.swap_chain.surface_format.colorSpace; // Swapchain colour space
+    swapChainCreateInfo.presentMode = presentation_mode;                                // Swapchain presentation mode
+    swapChainCreateInfo.imageExtent = extent;                                           // Swapchain image extents
+    swapChainCreateInfo.minImageCount = image_count;                                    // Minimum images in swapchain
+    // always 1 unless you are developing a stereoscopic 3D application
+    swapChainCreateInfo.imageArrayLayers = 1;                                        // Number of layers for each image in chain
+    swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;            // What attachment images will be used as
+    swapChainCreateInfo.preTransform = details.surfaceCapabilities.currentTransform; // Transform to perform on swap chain images
+    swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;          // How to handle blending images with external graphics (e.g. other windows)
+    swapChainCreateInfo.clipped = VK_TRUE;                                           // Whether to clip parts of image not in view (e.g. behind another window, off screen, etc)
+
+    // Get queue family indices
+    QueueFamilyIndices indices = get_queue_families(context.device.physical_device);
+
+    // If Graphics and Presentation families are different (quite unlikely but we have to handle that possibility), then swapchain must let images be shared between families
+    if (indices.graphicsFamily != indices.presentationFamily)
+    {
+        // Queues to share between
+        uint32_t queueFamilyIndices[] = {
+            (uint32_t)indices.graphicsFamily,
+            (uint32_t)indices.presentationFamily};
+
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; // Image share handling
+        swapChainCreateInfo.queueFamilyIndexCount = 2;                     // Number of queues to share images between
+        swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;      // Array of queues to share between
+    }
+    else
+    {
+        swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swapChainCreateInfo.queueFamilyIndexCount = 0;
+        swapChainCreateInfo.pQueueFamilyIndices = NULL;
+    }
+
+    // IF old swap chain been destroyed and this one replaces it, then link old one to quickly hand over responsibilities
+    // i.e. after resize, the actual swap chain must be destroyed and replaced by a new one.
+    // For now, we ignore resizing.
+    /*
+    With Vulkan it's possible that your swap chain becomes invalid or unoptimized while your application is running, for example because the window was resized.
+    In that case the swap chain actually needs to be recreated from scratch and a reference to the old one must be specified in this field.
+    */
+    swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    // Create Swapchain
+    VkResult result = vkCreateSwapchainKHR(context.device.logical_device, &swapChainCreateInfo, context.allocator, &context.swap_chain.handle);
+    if (result != VK_SUCCESS)
+        ERR_EXIT(
+            "Failed to create swap chain!\n",
+            "create_swap_chain");
+
+    // Now we have to retrieve the images
+}
 //--------------
 // Destroy
 //--------------
@@ -721,6 +866,7 @@ int init_renderer(GLFWwindow *window)
     create_surface(window);
     get_physical_device();
     create_logical_device();
+    create_swap_chain(window);
 
     return EXIT_SUCCESS;
 }
@@ -730,7 +876,8 @@ void cleanup_renderer()
     if (enable_validation_layers)
         DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
 
-    destroy_device(&mainDevice);
+    vkDestroySwapchainKHR(context.device.logical_device, context.swap_chain.handle, context.allocator);
+    destroy_device(&context.device);
     vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);
     vkDestroyInstance(context.instance, context.allocator);
 }
