@@ -41,6 +41,7 @@ typedef struct vulkan_swapchain
 {
     VkSurfaceFormatKHR surface_format;
     VkSwapchainKHR handle;
+    uint32_t image_count;
     VkImage *images;
     VkImageView *views;
 } vulkan_swapchain;
@@ -822,7 +823,51 @@ void create_swap_chain(GLFWwindow *window)
             "Failed to create swap chain!\n",
             "create_swap_chain");
 
-    // Now we have to retrieve the images
+    // Now we have to retrieve the handles to the images
+    // The images are created and cleaned up by swapchain impl so no need to create/clean up images explicitly
+    // Images are raw data and imageView is an interface to an image to view it.
+    // Imageview describes how to access the image and which part of the image to access,
+    // for example if it should be treated as a 2D texture depth texture without any mipmapping levels.
+    result = vkGetSwapchainImagesKHR(context.device.logical_device, context.swap_chain.handle, &context.swap_chain.image_count, NULL);
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to retrieve swapchain image count.\n", "create_swapchain");
+
+    if (!context.swap_chain.image_count)
+        return; // TODO: Not sure what to return
+
+    if (!context.swap_chain.images)
+        context.swap_chain.images = (VkImage *)(malloc(sizeof(VkImage) * context.swap_chain.image_count));
+
+    result = vkGetSwapchainImagesKHR(context.device.logical_device, context.swap_chain.handle, &context.swap_chain.image_count, context.swap_chain.images);
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to retrieve swapchain images.\n", "create_swapchain");
+
+    if (!context.swap_chain.views)
+        context.swap_chain.views = (VkImageView *)(malloc(sizeof(VkImageView) * context.swap_chain.image_count));
+
+    for (uint32_t i = 0; i < context.swap_chain.image_count; ++i)
+    {
+        VkImageViewCreateInfo viewCreateInfo = {};
+        viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewCreateInfo.image = context.swap_chain.images[i];              // Image to create view for
+        viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;                  // Type of image (1D, 2D, 3D, Cube, etc)
+        viewCreateInfo.format = context.swap_chain.surface_format.format; // Format of image data
+        // viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;      // Allows remapping of rgba components to other rgba values
+        // viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        // viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        // viewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+        // Subresources allow the view to view only a part of an image
+        viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // Which aspect of image to view (e.g. COLOR_BIT for viewing colour)
+        viewCreateInfo.subresourceRange.baseMipLevel = 0;                       // Start mipmap level to view from
+        viewCreateInfo.subresourceRange.levelCount = 1;                         // Number of mipmap levels to view
+        viewCreateInfo.subresourceRange.baseArrayLayer = 0;                     // Start array level to view from
+        viewCreateInfo.subresourceRange.layerCount = 1;                         // Number of array levels to view
+
+        result = vkCreateImageView(context.device.logical_device, &viewCreateInfo, context.allocator, &context.swap_chain.views[i]);
+        if (result != VK_SUCCESS)
+            ERR_EXIT("Failed to retrieve swapchain images view.\n", "create_swapchain::vkCreateImageView");
+    }
 }
 //--------------
 // Destroy
@@ -854,7 +899,17 @@ void destroy_device(main_device *the_device)
         the_device->swapchain_support.presentation_mode_count = 0;
     }
 
-    memset(&the_device->swapchain_support.surfaceCapabilities, 0, sizeof(the_device->swapchain_support.surfaceCapabilities));
+    // memset(&the_device->swapchain_support.surfaceCapabilities, 0, sizeof(the_device->swapchain_support.surfaceCapabilities));
+}
+
+void destroy_swapchain(vulkan_context *context)
+{
+    // Destroy depth attachment
+
+    for (uint32_t i = 0; i < context->swap_chain.image_count; ++i)
+        vkDestroyImageView(context->device.logical_device, context->swap_chain.views[i], context->allocator);
+
+    vkDestroySwapchainKHR(context->device.logical_device, context->swap_chain.handle, context->allocator);
 }
 
 //--------------
@@ -880,7 +935,7 @@ void cleanup_renderer()
     if (enable_validation_layers)
         DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
 
-    vkDestroySwapchainKHR(context.device.logical_device, context.swap_chain.handle, context.allocator);
+    destroy_swapchain(&context);
     destroy_device(&context.device);
     vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);
     vkDestroyInstance(context.instance, context.allocator);
