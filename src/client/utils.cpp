@@ -7,13 +7,11 @@ int clamp(int val, int low, int high)
     return val < low ? low : (val > high ? high : val);
 }
 
-b8 parse_file_into_str(const char *file_name, char *shader_str, int max_len)
+b8 parse_file_into_str(const char *file_name, int max_len, char *shader_str, size_t *str_len)
 {
     FILE *file = fopen(file_name, "r");
     if (!file)
-    {
         ERR_EXIT("opening file for reading:\n", "parse_file_into_str");
-    }
 
     size_t cnt = fread(shader_str, 1, max_len - 1, file);
     if ((int)cnt >= max_len - 1)
@@ -28,6 +26,7 @@ b8 parse_file_into_str(const char *file_name, char *shader_str, int max_len)
 
     // append \0 to end of file string
     shader_str[cnt] = 0;
+    *str_len = cnt + 1;
     fclose(file);
     return BC_TRUE;
 }

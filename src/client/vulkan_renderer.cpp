@@ -869,6 +869,64 @@ void create_swap_chain(GLFWwindow *window)
             ERR_EXIT("Failed to retrieve swapchain images view.\n", "create_swapchain::vkCreateImageView");
     }
 }
+
+VkShaderModule create_shader_module(const char *code, size_t code_len)
+{
+    // Shader Module creation information
+    VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
+    shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderModuleCreateInfo.codeSize = code_len;                              // Size of code
+    shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t *>(code); // Pointer to code (of uint32_t pointer type)
+
+    VkShaderModule shaderModule;
+    VkResult result = vkCreateShaderModule(context.device.logical_device, &shaderModuleCreateInfo, context.allocator, &shaderModule);
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to create a shader module!\n", "create_shader_module");
+
+    return shaderModule;
+}
+
+void create_graphics_pipeline()
+{
+    // Read in SPIR-V code of shaders
+    char vertex_shader_code[1024 * 256];
+    size_t vertex_shader_len;
+    b8 res = parse_file_into_str("Shaders/vert.spv", 1024 * 256, vertex_shader_code, &vertex_shader_len);
+
+    char frag_shader_code[1024 * 256];
+    size_t frag_shader_len;
+    res = parse_file_into_str("Shaders/frag.spv", 1024 * 256, frag_shader_code, &frag_shader_len);
+
+    // Create Shader Modules
+    VkShaderModule vertexShaderModule = create_shader_module(vertex_shader_code, vertex_shader_len);
+    VkShaderModule fragmentShaderModule = create_shader_module(frag_shader_code, frag_shader_len);
+
+    // -- SHADER STAGE CREATION INFORMATION --
+    // Vertex Stage creation information
+    VkPipelineShaderStageCreateInfo vertexShaderCreateInfo = {};
+    vertexShaderCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexShaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT; // Shader Stage name
+    vertexShaderCreateInfo.module = vertexShaderModule;        // Shader module to be used by stage
+    vertexShaderCreateInfo.pName = "main";                     // Entry point in to shader
+
+    // Fragment Stage creation information
+    VkPipelineShaderStageCreateInfo fragmentShaderCreateInfo = {};
+    fragmentShaderCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragmentShaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT; // Shader Stage name
+    fragmentShaderCreateInfo.module = fragmentShaderModule;        // Shader module to be used by stage
+    fragmentShaderCreateInfo.pName = "main";                       // Entry point in to shader
+
+    // Put shader stage creation info in to array
+    // Graphics Pipeline creation info requires array of shader stage creates
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vertexShaderCreateInfo, fragmentShaderCreateInfo};
+
+    // CREATE PIPELINE
+
+    // Destroy Shader Modules, no longer needed after Pipeline created
+    vkDestroyShaderModule(context.device.logical_device, fragmentShaderModule, nullptr);
+    vkDestroyShaderModule(context.device.logical_device, vertexShaderModule, nullptr);
+}
+
 //--------------
 // Destroy
 //--------------
@@ -926,6 +984,7 @@ int init_renderer(GLFWwindow *window)
     get_physical_device();
     create_logical_device();
     create_swap_chain(window);
+    create_graphics_pipeline();
 
     return EXIT_SUCCESS;
 }

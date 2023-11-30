@@ -4,6 +4,6 @@
 #include "defines.h"
 
 int clamp(int val, int low, int high);
-b8 parse_file_into_str(const char *file_name, char *shader_str, int max_len);
+b8 parse_file_into_str(const char *file_name, int max_len, char *shader_str, size_t *str_len);
 
 #endif
