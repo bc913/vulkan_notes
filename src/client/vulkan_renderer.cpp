@@ -825,7 +825,7 @@ void create_swap_chain(GLFWwindow *window)
 
     // Now we have to retrieve the handles to the images
     // The images are created and cleaned up by swapchain impl so no need to create/clean up images explicitly
-    // Images are raw data and imageView is an interface to an image to view it.
+    // Images are raw data (i.e. Texture in OpenGL) and imageView is an interface to an image to view it.
     // Imageview describes how to access the image and which part of the image to access,
     // for example if it should be treated as a 2D texture depth texture without any mipmapping levels.
     result = vkGetSwapchainImagesKHR(context.device.logical_device, context.swap_chain.handle, &context.swap_chain.image_count, NULL);
