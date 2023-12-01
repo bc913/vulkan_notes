@@ -92,6 +92,8 @@ Validation layers exists on the instance level. The device level validation laye
 ### Presentation
 - Displaying images in Vulkan is not supported by default. WSI (Window system integration) extensions should be enabled before.
 Some brief explanation: Swapchain will generate and store some image (data) and it has to present these images (data) onto the platform agnostic `VkSurfaceKHR` surface which is backed by the windowing system and acts such an interface. GLFW will be reading from this surface.
+
+> Vulkan does NOT have the concept of `default frame buffer` which OPENGL offers. This is handled via `swapchain` for Vulkan.
 #### Swapchain
 It is a group of images (data) that can be drawn to and presented to surface. `Swapchain` is a complex object that handles the retrieval and updating the data of the image(s) being displayed or yet to be displayed. It does NOT display the image. It only handles the data about it. It requires `VK_KHR_swapchain` extension which is device level extension.
 
@@ -266,6 +268,73 @@ void create_surface(GLFWwindow *window)
 // Destroy in reverse order so before destroy instance
 vkDestroySurfaceKHR(context.instance, surface, context.allocator);
 ```
+
+
+### Graphics Pipeline
+> The graphics pipeline in Vulkan is almost completely immutable, so you must recreate the pipeline from scratch if you want to change shaders, bind different framebuffers or change the blend function. (Dynamic states can be used to overcome) The disadvantage is that you'll have to create a number of pipelines that represent all of the different combinations of states you want to use in your rendering operations. However, because all of the operations you'll be doing in the pipeline are known in advance, the driver can optimize for it much better. 
+
+#### Tessellation:
+Allows you to subdivide geometry based on certain rules to increase the mesh quality. It can be used to generate brick walls, staircases, waves or ocean effects
+
+#### Geometry Shader:
+Can be used for shadowing.
+
+#### Shaders and SPIR-V
+There are two ways handling shaders:
+1. Load the raw shader code and compile it into shader in runtime. (do NOT implement this in Vulkan)
+2. Pre-compile the shader code to intermediate code named `SPIR-V` and load into a shader module.
+    - compilation will generate `.spv` as binary file.
+    - Then load that binary file into the shader module.
+The shader syntax is compiled for GLSL. `SPIR-V` can be compiled using tool `glslangValidator.exe` which is part of the VULKAN SDK.
+
+- https://github.com/KhronosGroup/SPIRV-Reflect
+- https://github.com/KhronosGroup/SPIRV-Headers
+- https://github.com/KhronosGroup/SPIRV-Tools
+- https://github.com/google/shaderc
+
+
+- [Converting shader source to SPIR-V on the fly without having to use command line tools](https://www.reddit.com/r/vulkan/comments/ecnjn7/converting_shader_source_to_spirv_on_the_fly/?rdt=35539)
+#### Renderpaass
+It is something that holds a pipeline and then handles how it is executed. You can multiple smaller subpasses inside the render pass that each subpass can use a different pipeline.
+
+#### Framebuffers
+They are connection between an image (or images) and the renderpass. Interface to an image
+    - Attach image(s) to a framebuffer
+    - renderpass then outputs fragment data from a pipeline's execution to the images bound to the framebuffer's attachments
+> Framebuffer images line up 1-to-1 with the attachments in the renderpass so the order should match
+- Framebuffers has a ref to attachments that are rendered to. They are used to relate data back to swapchain. Framebuffer glues things together.
+
+- Anytime you changed the window size, you need to regenerate the framebuffers.
+- It is always required a framebuffer for swapchain image.
+
+#### Command buffers
+Unlike opengl where one command is submitted to the GPU at a time, Vulkan works by pre-recording a group of commands, and then submitting them all to a queue at once. The commands are recorded in the command buffer and the command buffer(s) can be (re)used by the queue.
+
+Commands to draw something will usually in the form:
+    1. Start a renderpass
+    2. Bind a pipeline
+    3. Bind vertex/index data
+    4. Bind descriptor sets and push constants
+    5. Draw (output to whatever images are at the frame buffer that our sub pass is connected to)
+
+> One can also submit a command to begin a new subpass, but you will need to bind the appropriate pipeline again since each subpass requires a separate pipeline.
+- It is always required a command buffer for each swapchain image.
+
+Command buffers are stored in command pools and in order to execute the commands within, the command buffers should be submitted to the appropriate queue.
+
+- **Semaphores** flags that say if a resource can be accessed. If they are signalled (set to true) then the resource is available to use. If it is set to false (unsignalling), then the resource is in use, and the program must wait.
+> Semaphores are sync mechanism ONLY between GPU  functions. Yes, you can create them on CPU side but can't control them after creation.
+Use cases for semaphores:
+    - when an image has become available following presentation. (the gpu will not draw until it is available)
+    - when an image has finished being rendered and is therefore ready to present, we want to let GPU know that it's ready to be presented. (we don't want to present when the image is still being rendered. As soon as it's finished being rendering, it will signal to say that it's finished being rendering and then it will present it.)
+
+- **Fences**: similar to semaphores with the ability to achieve sync between CPU and GPU. (allowing us to block on the CPU) It is still GPU's responsibility to signal (set to true) to say that `resource is available` but it is up to the CPU now to unsignal.
+    Use cases:
+        - `vkWaitForFences`: This will block the CPU code until the GPU signals the fence.
+        - `vkResetFence`: This will unsignal a fence until the gpu signals it again.
+
+Usually they are used next to each other. Fences are used to ensure a frame is available so we don't accidentally flood the queue.
+
 
 ## References
 ### General
