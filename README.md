@@ -343,6 +343,7 @@ Usually they are used next to each other. Fences are used to ensure a frame is a
 - [Using Vulkan Hpp, The C++ Header for Vulkan](https://www.youtube.com/watch?v=KFsbrhcqW2U)
 
 - [Intel - API Without Secrets to Vulkan](https://www.intel.com/content/www/us/en/developer/articles/training/api-without-secrets-introduction-to-vulkan-part-1.html)
+- [Vulkan Guide](https://vkguide.dev/)
 
 ### Dev Environment
 - [Vulkan SDK for CI/CD](https://www.reddit.com/r/vulkan/comments/h9exvb/vulkansdk_for_ci/)
@@ -350,9 +351,16 @@ Usually they are used next to each other. Fences are used to ensure a frame is a
 
 ### Repositories
 - [KhronosGroup/VulkanSamples](https://github.com/KhronosGroup/Vulkan-Samples)
+- [Vulkan C++ examples and demos - SaschaWillems/Vulkan](https://github.com/SaschaWillems/Vulkan)
 - [Intel -> GameTechDev/IntroductionToVulkan](https://github.com/GameTechDev/IntroductionToVulkan)
 - [googlesamples/vulkan-basic-samples](https://github.com/googlesamples/vulkan-basic-samples)
+- [PacktPublishing/Learning-Vulkan](https://github.com/PacktPublishing/Learning-Vulkan)
+- [blurrypiano/littleVulkanEngine](https://github.com/blurrypiano/littleVulkanEngine)
 - [volk - meta-loader for Vulkan](https://github.com/zeux/volk)
 - [krOoze/Hello_Triangle](https://github.com/krOoze/Hello_Triangle)
 - [tksuoran/Vulkan-CPPTemplate](https://github.com/tksuoran/Vulkan-CPPTemplate)
 - [sjfricke/Vulkan-NDK-Template](https://github.com/sjfricke/Vulkan-NDK-Template)
+
+### CMake
+- [FindVulkan - Doc](https://cmake.org/cmake/help/v3.25/module/FindVulkan.html)
+- [FindVulkan - src](https://gitlab.kitware.com/cmake/cmake/blob/master/Modules/FindVulkan.cmake)
