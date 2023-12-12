@@ -15,6 +15,29 @@
 #define VOLK_IMPLEMENTATION
 #include "volk.h"
 
+typedef struct vulkan_renderpass
+{
+    VkRenderPass handle;
+    // render area
+    // an area of the image to render to
+    f32 x, y, w, h;
+    // Clear colors
+    f32 r, g, b, a;
+
+    f32 depth;
+    u32 stencil;
+
+    // vulkan_render_pass_state state;
+} vulkan_renderpass;
+
+typedef struct vulkan_framebuffer
+{
+    VkFramebuffer handle;
+    u32 attachment_count;
+    VkImageView *attachments;
+    vulkan_renderpass *renderpass;
+} vulkan_framebuffer;
+
 typedef struct SwapChainDetails
 {
     VkSurfaceCapabilitiesKHR surfaceCapabilities; // Surface properties, e.g. image size/extent
@@ -33,6 +56,8 @@ typedef struct vulkan_swapchain
     uint32_t image_count;
     VkImage *images;
     VkImageView *views;
+
+    vulkan_framebuffer *framebuffers;
 } vulkan_swapchain;
 
 typedef struct main_device
@@ -52,6 +77,7 @@ typedef struct vulkan_context
     VkSurfaceKHR surface;
     vulkan_swapchain swap_chain;
     main_device device;
+    vulkan_renderpass main_renderpass;
 } vulkan_context;
 
 // Indices (locations) of Queue Families (if they exist at all)

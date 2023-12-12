@@ -23,7 +23,6 @@ VkShaderStageFlagBits stage_types[OBJECT_SHADER_STAGE_COUNT] = {VK_SHADER_STAGE_
 static vulkan_context context;
 static VkPipeline graphicsPipeline;
 static VkPipelineLayout pipelineLayout;
-static VkRenderPass renderPass;
 
 // Extensions
 static const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -962,7 +961,7 @@ void create_render_pass()
     renderPassCreateInfo.dependencyCount = 2; // subpassDependencies.size()
     renderPassCreateInfo.pDependencies = subpassDependencies;
 
-    VkResult result = vkCreateRenderPass(context.device.logical_device, &renderPassCreateInfo, context.allocator, &renderPass);
+    VkResult result = vkCreateRenderPass(context.device.logical_device, &renderPassCreateInfo, context.allocator, &context.main_renderpass.handle);
     if (result != VK_SUCCESS)
         ERR_EXIT("Failed to create a Render Pass!\n", "create_render_pass");
 }
@@ -1166,8 +1165,8 @@ void create_graphics_pipeline()
     pipelineCreateInfo.pDepthStencilState = NULL;
     pipelineCreateInfo.layout = pipelineLayout; // Pipeline Layout pipeline should use
     //  this pipeline will be used by the render pass, not that the pipeline will use the render pass.
-    pipelineCreateInfo.renderPass = renderPass; // Render pass description the pipeline is compatible with
-    pipelineCreateInfo.subpass = 0;             // Subpass of render pass to use with pipeline
+    pipelineCreateInfo.renderPass = context.main_renderpass.handle; // Render pass description the pipeline is compatible with
+    pipelineCreateInfo.subpass = 0;                                 // Subpass of render pass to use with pipeline
 
     // Pipeline Derivatives : Can create multiple pipelines that derive from one another for optimisation
     pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE; // Existing pipeline to derive from...
@@ -1191,6 +1190,39 @@ void create_graphics_pipeline()
  */
 void create_frame_buffers()
 {
+    context.swap_chain.framebuffers = (vulkan_framebuffer *)(malloc(sizeof(vulkan_framebuffer) * context.swap_chain.image_count));
+    for (uint32_t i = 0; i < context.swap_chain.image_count; ++i)
+    {
+        uint32_t attachment_count = 1;
+        VkImageView attachments[/*attachment_count*/] = {
+            context.swap_chain.views[i] // TODO: add Depth attachment
+        };
+
+        // Take a copy of the attachments
+        context.swap_chain.framebuffers[i].attachments = (VkImageView *)(malloc(sizeof(VkImageView) * attachment_count));
+        for (uint32_t j = 0; j < attachment_count; ++j)
+            context.swap_chain.framebuffers[i].attachments[j] = attachments[j];
+
+        context.swap_chain.framebuffers[i].attachment_count = attachment_count;
+
+        context.swap_chain.framebuffers[i].renderpass = &context.main_renderpass;
+
+        // Generate the handle
+        VkFramebufferCreateInfo framebuffer_create_info = {};
+        framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebuffer_create_info.renderPass = context.main_renderpass.handle;
+        framebuffer_create_info.attachmentCount = attachment_count;
+        framebuffer_create_info.pAttachments = context.swap_chain.framebuffers[i].attachments;
+        framebuffer_create_info.width = context.swap_chain.extent_2d.width;
+        framebuffer_create_info.height = context.swap_chain.extent_2d.height;
+        framebuffer_create_info.layers = 1;
+
+        VkResult result = vkCreateFramebuffer(context.device.logical_device, &framebuffer_create_info,
+                                              context.allocator, &context.swap_chain.framebuffers[i].handle);
+
+        if (result != VK_SUCCESS)
+            ERR_EXIT("Failed to create VkFramebuffer!\n", "create_frame_buffers::vkCreateFrameBuffer");
+    }
 }
 
 //--------------
@@ -1242,6 +1274,24 @@ void destroy_graphics_pipeline()
     vkDestroyPipelineLayout(context.device.logical_device, pipelineLayout, context.allocator);
 }
 
+void destroy_framebuffers()
+{
+    for (uint32_t i = 0; i < context.swap_chain.image_count; ++i)
+    {
+        vulkan_framebuffer fb = context.swap_chain.framebuffers[i];
+        vkDestroyFramebuffer(context.device.logical_device, fb.handle, context.allocator);
+        if (fb.attachments)
+        {
+            free(fb.attachments);
+            fb.attachments = 0;
+        }
+
+        fb.handle = 0;
+        fb.attachment_count = 0;
+        fb.renderpass = 0;
+    }
+}
+
 //--------------
 // Public
 //--------------
@@ -1266,8 +1316,9 @@ int init_renderer(GLFWwindow *window)
 void cleanup_renderer()
 {
     // destroy in reverse order of creation
+    destroy_framebuffers();
     destroy_graphics_pipeline();
-    vkDestroyRenderPass(context.device.logical_device, renderPass, context.allocator);
+    vkDestroyRenderPass(context.device.logical_device, context.main_renderpass.handle, context.allocator);
     destroy_swapchain(&context);
     destroy_device(&context.device);
     vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);
