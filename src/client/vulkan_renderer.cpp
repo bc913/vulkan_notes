@@ -1,6 +1,7 @@
 #include "vulkan_renderer.h"
 #include "log_assert.h"
 #include "utils.h"
+#include "file_system.h"
 
 // Should come before includes
 #if defined(_WIN32)
@@ -22,6 +23,10 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdint.h>
+
+#define OBJECT_SHADER_STAGE_COUNT 2
+char stage_type_strs[OBJECT_SHADER_STAGE_COUNT][5] = {"vert", "frag"};
+VkShaderStageFlagBits stage_types[OBJECT_SHADER_STAGE_COUNT] = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
 
 //--------------
 // Definitions
@@ -877,13 +882,31 @@ void create_swap_chain(GLFWwindow *window)
     }
 }
 
-VkShaderModule create_shader_module(const char *code, size_t code_len)
+VkShaderModule create_shader_module(const char *filename)
 {
+    // Obtain file handle.
+    file_handle handle;
+    if (!filesystem_open(filename, FILE_MODE_READ, true, &handle))
+    {
+        ERR_EXIT("Unable to read shader module.\n", "create_shader_module");
+    }
+
+    // Read the entire file as binary.
+    u64 size = 0;
+    u8 *file_buffer = 0;
+    if (!filesystem_read_all_bytes(&handle, &file_buffer, &size))
+    {
+        ERR_EXIT("Unable to binary read shader module.\n", "create_shader_module");
+    }
+
     // Shader Module creation information
     VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
     shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderModuleCreateInfo.codeSize = code_len;                              // Size of code
-    shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t *>(code); // Pointer to code (of uint32_t pointer type)
+    shaderModuleCreateInfo.codeSize = size;            // Size of code
+    shaderModuleCreateInfo.pCode = (u32 *)file_buffer; // Pointer to code (of uint32_t pointer type)
+
+    // Close the file.
+    filesystem_close(&handle);
 
     VkShaderModule shaderModule;
     VkResult result = vkCreateShaderModule(context.device.logical_device, &shaderModuleCreateInfo, context.allocator, &shaderModule);
@@ -1005,17 +1028,17 @@ void create_render_pass()
 void create_graphics_pipeline()
 {
     // Read in SPIR-V code of shaders
-    char vertex_shader_code[1024 * 256];
-    size_t vertex_shader_len;
-    b8 res = parse_file_into_str("Shaders/vert.spv", 1024 * 256, vertex_shader_code, &vertex_shader_len);
+    // char vertex_shader_code[1024 * 256];
+    // size_t vertex_shader_len;
+    // b8 res = parse_file_into_str("assets/shaders/shader_base.vert.spv", 1024 * 256, vertex_shader_code, &vertex_shader_len);
 
-    char frag_shader_code[1024 * 256];
-    size_t frag_shader_len;
-    res = parse_file_into_str("Shaders/frag.spv", 1024 * 256, frag_shader_code, &frag_shader_len);
+    // char frag_shader_code[1024 * 256];
+    // size_t frag_shader_len;
+    // res = parse_file_into_str("assets/shaders/shader_base.frag.spv", 1024 * 256, frag_shader_code, &frag_shader_len);
 
     // Create Shader Modules
-    VkShaderModule vertexShaderModule = create_shader_module(vertex_shader_code, vertex_shader_len);
-    VkShaderModule fragmentShaderModule = create_shader_module(frag_shader_code, frag_shader_len);
+    VkShaderModule vertexShaderModule = create_shader_module("assets/shaders/shader_base.vert.spv");
+    VkShaderModule fragmentShaderModule = create_shader_module("assets/shaders/shader_base.frag.spv");
 
     // -- SHADER STAGE CREATION INFORMATION --
     // Vertex Stage creation information

@@ -9,7 +9,9 @@ target_include_directories(
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> # or include
 )
 set(_SOURCE_FILES)
-list(APPEND _SOURCE_FILES 
+list(APPEND _SOURCE_FILES
+            file_system.h
+            file_system.cpp
             main.cpp 
             vulkan_renderer.cpp
             defines.h
@@ -20,6 +22,11 @@ list(APPEND _SOURCE_FILES
 target_sources(${PROJECT_NAME} PRIVATE ${_SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE glm glfw Vulkan::Headers volk::volk_headers)
 target_compile_definitions(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:DEBUG_MODE>)
+
+# ----------
+# Post-Build
+# ----------
+APPEND_GLSL_TO_TARGET(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders")
 
 install(
     TARGETS ${PROJECT_NAME}

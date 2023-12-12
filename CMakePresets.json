@@ -13,7 +13,8 @@
             "installDir": "${sourceDir}/out/install/${presetName}",
             "cacheVariables": {
                 "BC_USE_VOLK_LOADER": "ON",
-                "BC_USE_GLAD_LOADER": "OFF"
+                "BC_USE_GLAD_LOADER": "OFF",
+                "BC_AUTO_LOCATE_VULKAN": "ON"
             }
         },
         {
