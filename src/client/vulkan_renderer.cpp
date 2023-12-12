@@ -1228,7 +1228,7 @@ void create_frame_buffers()
 //--------------
 // Destroy
 //--------------
-void destroy_device(main_device *the_device)
+void destroy_device(vulkan_device *the_device)
 {
     context.device.graphicsQueue = 0;
     context.device.presentQueue = 0;

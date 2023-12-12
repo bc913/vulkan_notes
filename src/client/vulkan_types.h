@@ -62,7 +62,7 @@ typedef struct vulkan_swapchain
     vulkan_framebuffer *framebuffers;
 } vulkan_swapchain;
 
-typedef struct main_device
+typedef struct vulkan_device
 {
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
@@ -70,7 +70,7 @@ typedef struct main_device
 
     VkQueue graphicsQueue;
     VkQueue presentQueue;
-} main_device;
+} vulkan_device;
 
 typedef struct vulkan_context
 {
@@ -78,7 +78,7 @@ typedef struct vulkan_context
     VkAllocationCallbacks *allocator;
     VkSurfaceKHR surface;
     vulkan_swapchain swap_chain;
-    main_device device;
+    vulkan_device device;
     vulkan_renderpass main_renderpass;
 } vulkan_context;
 
