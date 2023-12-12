@@ -83,10 +83,10 @@ typedef struct vulkan_context
 } vulkan_context;
 
 // Indices (locations) of Queue Families (if they exist at all)
-typedef struct QueueFamilyIndices
+typedef struct vulkan_physical_device_queue_family_info
 {
     int graphicsFamily = -1;     // Location of Graphics Queue Family
     int presentationFamily = -1; // Location of the presentation queue family
-} QueueFamilyIndices;
+} vulkan_physical_device_queue_family_info;
 
 #endif

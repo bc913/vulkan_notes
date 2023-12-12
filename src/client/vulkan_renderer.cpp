@@ -206,13 +206,13 @@ const char **get_required_validation_layers(uint32_t *count)
 
 // Queue families
 // ###############
-VkBool32 is_valid_queue_family_indices(QueueFamilyIndices qfi)
+VkBool32 is_valid_queue_family_indices(vulkan_physical_device_queue_family_info qfi)
 {
     return qfi.graphicsFamily >= 0 && qfi.presentationFamily >= 0;
 }
-QueueFamilyIndices get_queue_families(VkPhysicalDevice device)
+vulkan_physical_device_queue_family_info get_queue_families(VkPhysicalDevice device)
 {
-    QueueFamilyIndices indices;
+    vulkan_physical_device_queue_family_info indices;
 
     // Get all queue family for given device
     uint32_t queue_family_count = 0;
@@ -625,7 +625,7 @@ void get_physical_device()
 void create_logical_device()
 {
     // Get the queue family indices for the chosen Physical Device
-    QueueFamilyIndices indices = get_queue_families(context.device.physical_device);
+    vulkan_physical_device_queue_family_info indices = get_queue_families(context.device.physical_device);
 
     // For each indices, it requires a queue ->std::unordered_set can be used here
     // No duplicate indices should be alive
@@ -736,7 +736,7 @@ void create_swap_chain(GLFWwindow *window)
     swapChainCreateInfo.clipped = VK_TRUE;                                           // Whether to clip parts of image not in view (e.g. behind another window, off screen, etc)
 
     // Get queue family indices
-    QueueFamilyIndices indices = get_queue_families(context.device.physical_device);
+    vulkan_physical_device_queue_family_info indices = get_queue_families(context.device.physical_device);
 
     // If Graphics and Presentation families are different (quite unlikely but we have to handle that possibility), then swapchain must let images be shared between families
     if (indices.graphicsFamily != indices.presentationFamily)
