@@ -208,7 +208,7 @@ const char **get_required_validation_layers(uint32_t *count)
 // ###############
 VkBool32 is_valid_queue_family_indices(vulkan_physical_device_queue_family_info qfi)
 {
-    return qfi.graphicsFamily >= 0 && qfi.presentationFamily >= 0;
+    return qfi.graphics_family_index >= 0 && qfi.presentation_family_index >= 0;
 }
 vulkan_physical_device_queue_family_info get_queue_families(VkPhysicalDevice device)
 {
@@ -235,14 +235,14 @@ vulkan_physical_device_queue_family_info get_queue_families(VkPhysicalDevice dev
         // First check if queue family has at least 1 queue in that family (could have no queues)
         // Queue can be multiple types defined through bitfield. Need to bitwise AND with VK_QUEUE_*_BIT to check if has required type
         if (queue_families[i].queueCount > 0 && queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            indices.graphicsFamily = i;
+            indices.graphics_family_index = i;
 
         // Check if Queue Family supports presentation
         VkBool32 presentation_support = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, context.surface, &presentation_support);
         // Check if queue is presentation type (can be both graphics and presentation)
         if (queue_families[i].queueCount > 0 && presentation_support)
-            indices.presentationFamily = i;
+            indices.presentation_family_index = i;
 
         // Check if queue family indices are in a valid state, stop searching if so
         if (is_valid_queue_family_indices(indices))
@@ -620,25 +620,29 @@ void get_physical_device()
 
     if (context.device.physical_device == VK_NULL_HANDLE)
         ERR_EXIT("Failed to find a suitable GPU.\n", "get_physical_device");
+
+    // Get the queue family indices for the chosen Physical Device
+    vulkan_physical_device_queue_family_info indices = get_queue_families(context.device.physical_device);
+    context.device.graphics_queue_index = indices.graphics_family_index;
+    context.device.present_queue_index = indices.presentation_family_index;
 }
 
 void create_logical_device()
 {
-    // Get the queue family indices for the chosen Physical Device
-    vulkan_physical_device_queue_family_info indices = get_queue_families(context.device.physical_device);
+    b8 present_shares_graphics_queue = context.device.graphics_queue_index == context.device.present_queue_index;
 
     // For each indices, it requires a queue ->std::unordered_set can be used here
     // No duplicate indices should be alive
     // TODO: We don't have hash_set impl yet so use this manual approach
-    size_t indices_count = indices.graphicsFamily == indices.presentationFamily ? 1 : 2;
+    size_t indices_count = present_shares_graphics_queue ? 1 : 2;
 
-    int *unique_queue_families = (int *)(malloc(sizeof(int) * indices_count));
+    i32 *unique_queue_families = (i32 *)(malloc(sizeof(i32) * indices_count));
     if (indices_count == 1)
-        unique_queue_families[0] = indices.graphicsFamily;
+        unique_queue_families[0] = context.device.graphics_queue_index;
     else if (indices_count == 2)
     {
-        unique_queue_families[0] = indices.graphicsFamily;
-        unique_queue_families[1] = indices.presentationFamily;
+        unique_queue_families[0] = context.device.graphics_queue_index;
+        unique_queue_families[1] = context.device.present_queue_index;
     }
 
     // Store queue infos
@@ -692,8 +696,8 @@ void create_logical_device()
     // Queues are created at the same time as the device...
     // So we want handle to queues
     // From given logical device, of given Queue Family, of given Queue Index (0 since only one queue), place reference in given VkQueue
-    vkGetDeviceQueue(context.device.logical_device, indices.graphicsFamily, 0, &context.device.graphicsQueue);
-    vkGetDeviceQueue(context.device.logical_device, indices.presentationFamily, 0, &context.device.presentQueue);
+    vkGetDeviceQueue(context.device.logical_device, context.device.graphics_queue_index, 0, &context.device.graphicsQueue);
+    vkGetDeviceQueue(context.device.logical_device, context.device.present_queue_index, 0, &context.device.presentQueue);
 
     free(unique_queue_families);
     free(queue_create_infos);
@@ -735,16 +739,13 @@ void create_swap_chain(GLFWwindow *window)
     swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;          // How to handle blending images with external graphics (e.g. other windows)
     swapChainCreateInfo.clipped = VK_TRUE;                                           // Whether to clip parts of image not in view (e.g. behind another window, off screen, etc)
 
-    // Get queue family indices
-    vulkan_physical_device_queue_family_info indices = get_queue_families(context.device.physical_device);
-
     // If Graphics and Presentation families are different (quite unlikely but we have to handle that possibility), then swapchain must let images be shared between families
-    if (indices.graphicsFamily != indices.presentationFamily)
+    if (context.device.graphics_queue_index != context.device.present_queue_index)
     {
         // Queues to share between
         uint32_t queueFamilyIndices[] = {
-            (uint32_t)indices.graphicsFamily,
-            (uint32_t)indices.presentationFamily};
+            (uint32_t)context.device.graphics_queue_index,
+            (uint32_t)context.device.present_queue_index};
 
         swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; // Image share handling
         swapChainCreateInfo.queueFamilyIndexCount = 2;                     // Number of queues to share images between

@@ -68,6 +68,10 @@ typedef struct vulkan_device
     VkDevice logical_device;
     SwapChainDetails swapchain_support;
 
+    i32 graphics_queue_index;
+    i32 present_queue_index;
+    i32 transfer_queue_index;
+
     VkQueue graphicsQueue;
     VkQueue presentQueue;
 } vulkan_device;
@@ -85,8 +89,8 @@ typedef struct vulkan_context
 // Indices (locations) of Queue Families (if they exist at all)
 typedef struct vulkan_physical_device_queue_family_info
 {
-    int graphicsFamily = -1;     // Location of Graphics Queue Family
-    int presentationFamily = -1; // Location of the presentation queue family
+    i32 graphics_family_index = -1;     // Location of Graphics Queue Family
+    i32 presentation_family_index = -1; // Location of the presentation queue family
 } vulkan_physical_device_queue_family_info;
 
 #endif
