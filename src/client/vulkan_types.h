@@ -15,6 +15,8 @@
 #define VOLK_IMPLEMENTATION
 #include "volk.h"
 
+#include "defines.h"
+
 typedef struct vulkan_renderpass
 {
     VkRenderPass handle;
