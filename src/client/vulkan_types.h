@@ -62,6 +62,36 @@ typedef struct vulkan_swapchain
     vulkan_framebuffer *framebuffers;
 } vulkan_swapchain;
 
+typedef enum vulkan_command_buffer_state
+{
+    COMMAND_BUFFER_STATE_READY,
+    /*
+    states the point when the commands are issued
+    to the command buffer.
+    */
+    COMMAND_BUFFER_STATE_RECORDING,
+    /*
+
+    */
+    COMMAND_BUFFER_STATE_IN_RENDER_PASS,
+    /* states that recording is over*/
+    COMMAND_BUFFER_STATE_RECORDING_ENDED,
+    /* all the commands in the buffer has been completely
+    executed. Occurs after RECORDING_ENDED state.
+    */
+    COMMAND_BUFFER_STATE_SUBMITTED,
+    COMMAND_BUFFER_STATE_NOT_ALLOCATED
+} vulkan_command_buffer_state;
+
+// Holds a list of commands to be executed by a queue
+typedef struct vulkan_command_buffer
+{
+    VkCommandBuffer handle;
+
+    // Command buffer state.
+    vulkan_command_buffer_state state;
+} vulkan_command_buffer;
+
 typedef struct vulkan_device
 {
     VkPhysicalDevice physical_device;
@@ -74,16 +104,29 @@ typedef struct vulkan_device
 
     VkQueue graphicsQueue;
     VkQueue presentQueue;
+
+    VkCommandPool graphics_command_pool;
 } vulkan_device;
 
 typedef struct vulkan_context
 {
+    // The framebuffer's current width.
+    u32 framebuffer_width;
+    // The framebuffer's current height.
+    u32 framebuffer_height;
+
+    // Currently used image's index
+    u32 image_index;
+    f32 frame_delta_time;
+
     VkInstance instance;
     VkAllocationCallbacks *allocator;
     VkSurfaceKHR surface;
     vulkan_swapchain swap_chain;
     vulkan_device device;
     vulkan_renderpass main_renderpass;
+
+    vulkan_command_buffer *graphics_command_buffers;
 } vulkan_context;
 
 // Indices (locations) of Queue Families (if they exist at all)

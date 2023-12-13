@@ -23,6 +23,7 @@ VkShaderStageFlagBits stage_types[OBJECT_SHADER_STAGE_COUNT] = {VK_SHADER_STAGE_
 static vulkan_context context;
 static VkPipeline graphicsPipeline;
 static VkPipelineLayout pipelineLayout;
+static vulkan_command_buffer commandBuffer;
 
 // Extensions
 static const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -328,6 +329,7 @@ VkExtent2D choose_swap_extent(GLFWwindow *window, VkSurfaceCapabilitiesKHR *surf
     if (surface_capabilities->currentExtent.width != UINT32_MAX)
         return surface_capabilities->currentExtent;
 
+    // TODO: You might use context.framebuffer_width, height
     // Vulkan works with pixels so we need resolution in pixels
     int width, height;
     glfwGetFramebufferSize(window, &width, &height); // in pixels
@@ -965,6 +967,11 @@ void create_render_pass()
     VkResult result = vkCreateRenderPass(context.device.logical_device, &renderPassCreateInfo, context.allocator, &context.main_renderpass.handle);
     if (result != VK_SUCCESS)
         ERR_EXIT("Failed to create a Render Pass!\n", "create_render_pass");
+
+    context.main_renderpass.w = context.framebuffer_width;
+    context.main_renderpass.h = context.framebuffer_height;
+    context.main_renderpass.x = 0;
+    context.main_renderpass.y = 0;
 }
 
 void create_graphics_pipeline()
@@ -1035,8 +1042,8 @@ void create_graphics_pipeline()
     VkViewport viewport = {};
     viewport.x = 0.0f;                                            // x start coordinate
     viewport.y = 0.0f;                                            // y start coordinate
-    viewport.width = (float)context.swap_chain.extent_2d.width;   // width of viewport
-    viewport.height = (float)context.swap_chain.extent_2d.height; // height of viewport
+    viewport.width = (float)context.swap_chain.extent_2d.width;   // width of viewport (f32)context.framebuffer_width
+    viewport.height = (float)context.swap_chain.extent_2d.height; // height of viewport (f32)context.framebuffer_height
     viewport.minDepth = 0.0f;                                     // min framebuffer depth
     viewport.maxDepth = 1.0f;                                     // max framebuffer depth
 
@@ -1214,8 +1221,8 @@ void create_frame_buffers()
         framebuffer_create_info.renderPass = context.main_renderpass.handle;
         framebuffer_create_info.attachmentCount = attachment_count;
         framebuffer_create_info.pAttachments = context.swap_chain.framebuffers[i].attachments;
-        framebuffer_create_info.width = context.swap_chain.extent_2d.width;
-        framebuffer_create_info.height = context.swap_chain.extent_2d.height;
+        framebuffer_create_info.width = context.swap_chain.extent_2d.width;   // TODO: context.framebuffer_width
+        framebuffer_create_info.height = context.swap_chain.extent_2d.height; // TODO: context.framebuffer_heigtht
         framebuffer_create_info.layers = 1;
 
         VkResult result = vkCreateFramebuffer(context.device.logical_device, &framebuffer_create_info,
@@ -1224,6 +1231,161 @@ void create_frame_buffers()
         if (result != VK_SUCCESS)
             ERR_EXIT("Failed to create VkFramebuffer!\n", "create_frame_buffers::vkCreateFrameBuffer");
     }
+}
+
+void create_command_pool()
+{
+    // Create command pool for graphics queue.
+    VkCommandPoolCreateInfo pool_create_info = {};
+    pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    // Use the graphics queue
+    pool_create_info.queueFamilyIndex = context.device.graphics_queue_index;
+    pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+    VkResult result = vkCreateCommandPool(
+        context.device.logical_device, &pool_create_info, context.allocator, &context.device.graphics_command_pool);
+
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to create Command pool!\n", "create_command_pool::vkCreateCommandPool");
+}
+
+/**
+ * Command buffers are destroyed automatically during the destruction of
+ * the corresponding command pool so no need to explicitly free.
+ */
+void create_command_buffers()
+{
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = context.device.graphics_command_pool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+    allocInfo.pNext = 0;
+
+    commandBuffer.state = COMMAND_BUFFER_STATE_NOT_ALLOCATED;
+    VkResult result = vkAllocateCommandBuffers(context.device.logical_device, &allocInfo, &commandBuffer.handle);
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to allocate command buffers!\n", "create_command_buffer::vkAllocateCommandBuffers");
+    commandBuffer.state = COMMAND_BUFFER_STATE_READY;
+}
+
+//--------------
+// Begin
+//--------------
+void command_buffer_begin(vulkan_command_buffer *command_buffer)
+{
+    VkCommandBufferBeginInfo begin_info = {};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags = 0;
+    VkResult result = vkBeginCommandBuffer(command_buffer->handle, &begin_info);
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to begin recording command buffer", "command_buffer_begin");
+    command_buffer->state = COMMAND_BUFFER_STATE_RECORDING;
+}
+
+void renderpass_begin(vulkan_command_buffer *command_buffer, vulkan_renderpass *renderpass, u32 image_index)
+{
+    VkRenderPassBeginInfo begin_info = {};
+    begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    begin_info.renderPass = renderpass->handle;
+    begin_info.framebuffer = context.swap_chain.framebuffers[image_index].handle;
+    begin_info.renderArea.offset.x = renderpass->x;
+    begin_info.renderArea.offset.y = renderpass->y;
+    begin_info.renderArea.extent = context.swap_chain.extent_2d;
+    // begin_info.renderArea.extent.width = renderpass->w;
+    // begin_info.renderArea.extent.height = renderpass->h;
+
+    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    begin_info.clearValueCount = 1;
+    begin_info.pClearValues = &clearColor;
+
+    vkCmdBeginRenderPass(command_buffer->handle, &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+    command_buffer->state = COMMAND_BUFFER_STATE_IN_RENDER_PASS;
+}
+
+void begin_frame(f32 delta_time)
+{
+    context.frame_delta_time = delta_time;
+    // TODO set context.image_index
+    u32 image_index = context.image_index;
+
+    // Begin recording commands
+    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
+    vulkan_command_buffer *command_buffer = &commandBuffer;
+
+    command_buffer_begin(command_buffer);
+    renderpass_begin(command_buffer, &context.main_renderpass, image_index);
+}
+
+//--------------
+// Update
+//--------------
+void update_global_state()
+{
+    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
+    vulkan_command_buffer *command_buffer = &commandBuffer;
+
+    // vulkan_object_shader_use
+    vkCmdBindPipeline(command_buffer->handle, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    // END: // vulkan_object_shader_use
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (f32)context.swap_chain.extent_2d.width;
+    viewport.height = (f32)context.swap_chain.extent_2d.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(command_buffer->handle, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = context.swap_chain.extent_2d;
+    vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);
+
+    // vulkan_object_shader_update_global_state
+    // END: vulkan_object_shader_update_global_state
+}
+
+void update_object()
+{
+    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
+    vulkan_command_buffer *command_buffer = &commandBuffer;
+
+    vkCmdDraw(command_buffer->handle, 3, 1, 0, 0);
+}
+
+void update()
+{
+    update_global_state();
+    update_object();
+}
+//--------------
+// End
+//--------------
+void end_frame(f32 delta_time)
+{
+    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
+    vulkan_command_buffer *command_buffer = &commandBuffer;
+
+    // End renderpass
+    vkCmdEndRenderPass(command_buffer->handle);
+    command_buffer->state = COMMAND_BUFFER_STATE_RECORDING;
+    // End command buffer
+    VkResult res = vkEndCommandBuffer(command_buffer->handle);
+    if (res != VK_SUCCESS)
+        ERR_EXIT("failed to record command buffer!\n", "vkEndCommandBuffer");
+    command_buffer->state = COMMAND_BUFFER_STATE_RECORDING_ENDED;
+}
+
+//--------------
+// Draw
+//--------------
+void draw_frame(f32 delta_time)
+{
+    begin_frame(delta_time);
+    update();
+    end_frame(delta_time);
 }
 
 //--------------
@@ -1292,14 +1454,29 @@ void destroy_framebuffers()
         fb.renderpass = 0;
     }
 }
+// Since this is a device related stuff, this can be handled in destroy_device
+void destroy_command_pools()
+{
+    vkDestroyCommandPool(context.device.logical_device, context.device.graphics_command_pool, context.allocator);
+    // Destroy for other command pools when necessary
+    /*
+    // Do this after device destroy for later
+    context->device.graphics_queue_index = -1;
+    context->device.present_queue_index = -1;
+    */
+}
 
 //--------------
 // Public
 //--------------
-int init_renderer(GLFWwindow *window)
+int init_renderer(GLFWwindow *window, u32 width, u32 height)
 {
     if (init_volk() == EXIT_FAILURE)
         return EXIT_FAILURE;
+
+    // backend initialize
+    context.framebuffer_width = width;
+    context.framebuffer_height = height;
 
     create_instance();
     setup_debug_messenger();
@@ -1310,6 +1487,8 @@ int init_renderer(GLFWwindow *window)
     create_render_pass();
     create_graphics_pipeline();
     create_frame_buffers();
+    create_command_pool();
+    create_command_buffers();
 
     return EXIT_SUCCESS;
 }
@@ -1317,6 +1496,7 @@ int init_renderer(GLFWwindow *window)
 void cleanup_renderer()
 {
     // destroy in reverse order of creation
+    destroy_command_pools();
     destroy_framebuffers();
     destroy_graphics_pipeline();
     vkDestroyRenderPass(context.device.logical_device, context.main_renderpass.handle, context.allocator);

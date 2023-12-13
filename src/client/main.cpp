@@ -2,13 +2,21 @@
 #include <stdlib.h>
 #include "vulkan_renderer.h"
 #include "log_assert.h"
+#include "defines.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 GLFWwindow *window;
+typedef struct application_state
+{
+    b8 is_running;
+    b8 is_suspended;
+    i16 width, height;
+} application_state;
+static application_state *app_state;
 
-void init_window(const char *name = "Test Window", const int width = 800, const int height = 600)
+void init_window(const char *name, const int width, const int height)
 {
     if (!glfwInit())
         ERR_EXIT("Cannot initialize GLFW.\nExiting ...\n", "init_window");
@@ -27,22 +35,37 @@ void init_window(const char *name = "Test Window", const int width = 800, const 
     }
 }
 
-int main()
+int init()
 {
-    init_window();
-
-    if (init_renderer(window) == EXIT_FAILURE)
+    app_state = (application_state *)(malloc(sizeof(application_state)));
+    app_state->width = 800;
+    app_state->height = 600;
+    init_window("Test Window", app_state->width, app_state->height);
+    if (init_renderer(window, app_state->width, app_state->height) == EXIT_FAILURE)
         return EXIT_FAILURE;
+}
 
+void run()
+{
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
     }
+}
 
+void shutdown()
+{
     cleanup_renderer();
-
     glfwDestroyWindow(window);
     glfwTerminate();
 
+    free(app_state);
+}
+
+int main()
+{
+    init();
+    run();
+    shutdown();
     return EXIT_SUCCESS;
 }
