@@ -23,7 +23,6 @@ VkShaderStageFlagBits stage_types[OBJECT_SHADER_STAGE_COUNT] = {VK_SHADER_STAGE_
 static vulkan_context context;
 static VkPipeline graphicsPipeline;
 static VkPipelineLayout pipelineLayout;
-static vulkan_command_buffer commandBuffer;
 
 // Extensions
 static const char *requested_device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -725,6 +724,8 @@ void create_swap_chain(GLFWwindow *window)
     if (details.surfaceCapabilities.maxImageCount > 0 && image_count > details.surfaceCapabilities.maxImageCount)
         image_count = details.surfaceCapabilities.maxImageCount;
 
+    context.swap_chain.max_frames_in_flight = image_count - 1;
+
     // Creation information for swap chain
     VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
     swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -778,13 +779,16 @@ void create_swap_chain(GLFWwindow *window)
 
     context.swap_chain.surface_format = surface_format;
     context.swap_chain.extent_2d = extent;
+    // Start with a zero frame index.
+    context.current_frame = 0;
+    context.swap_chain.image_count = 0;
 
     // Now we have to retrieve the handles to the images
     // The images are created and cleaned up by swapchain impl so no need to create/clean up images explicitly
     // Images are raw data (i.e. Texture in OpenGL) and imageView is an interface to an image to view it.
     // Imageview describes how to access the image and which part of the image to access,
     // for example if it should be treated as a 2D texture depth texture without any mipmapping levels.
-    result = vkGetSwapchainImagesKHR(context.device.logical_device, context.swap_chain.handle, &context.swap_chain.image_count, NULL);
+    result = vkGetSwapchainImagesKHR(context.device.logical_device, context.swap_chain.handle, &context.swap_chain.image_count, 0);
     if (result != VK_SUCCESS)
         ERR_EXIT("Failed to retrieve swapchain image count.\n", "create_swapchain");
 
@@ -860,6 +864,54 @@ VkShaderModule create_shader_module(const char *filename)
     return shaderModule;
 }
 
+VkSubpassDependency define_subpass_dep()
+{
+
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dependencyFlags = 0;
+
+    return dependency;
+
+    /*
+
+
+    // // Need to determine when layout transitions occur using subpass dependencies
+    // VkSubpassDependency subpassDependencies[2] = {};
+
+    // // Transition from colourAttachment.initialLayout to colourAttachmentReference.layout
+    // // Conversion from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    // // Transition must happen after...
+    // subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;                    // Subpass index (VK_SUBPASS_EXTERNAL = Special value meaning outside of renderpass)
+    // subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT; // Pipeline stage
+    // subpassDependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;           // Stage access mask (memory access)
+    // // But must happen before...
+    // subpassDependencies[0].dstSubpass = 0;
+    // subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    // subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    // subpassDependencies[0].dependencyFlags = 0;
+
+    // // Transition from colourAttachmentReference.layout to  colourAttachment.finalLayout
+    // // Conversion from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    // // Transition must happen after...
+    // subpassDependencies[1].srcSubpass = 0;
+    // subpassDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    // subpassDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    // ;
+    // // But must happen before...
+    // subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL; // since we have one subpass it is going out of the render pass
+    // subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    // subpassDependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    // subpassDependencies[1].dependencyFlags = 0;
+
+    */
+}
+
 /*
 we need to tell Vulkan about the framebuffer attachments that will be used while rendering. We need to specify how many color and depth buffers there will be,
 how many samples to use for each of them and how their contents should be handled throughout the rendering operations.
@@ -922,32 +974,7 @@ void create_render_pass()
     subpass.pColorAttachments = &colourAttachmentReference;
 
     // Need to determine when layout transitions occur using subpass dependencies
-    VkSubpassDependency subpassDependencies[2] = {};
-
-    // Transition from colourAttachment.initialLayout to colourAttachmentReference.layout
-    // Conversion from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    // Transition must happen after...
-    subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;                    // Subpass index (VK_SUBPASS_EXTERNAL = Special value meaning outside of renderpass)
-    subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT; // Pipeline stage
-    subpassDependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;           // Stage access mask (memory access)
-    // But must happen before...
-    subpassDependencies[0].dstSubpass = 0;
-    subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    subpassDependencies[0].dependencyFlags = 0;
-
-    // Transition from colourAttachmentReference.layout to  colourAttachment.finalLayout
-    // Conversion from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    // Transition must happen after...
-    subpassDependencies[1].srcSubpass = 0;
-    subpassDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpassDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    ;
-    // But must happen before...
-    subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL; // since we have one subpass it is going out of the render pass
-    subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    subpassDependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    subpassDependencies[1].dependencyFlags = 0;
+    VkSubpassDependency subpassDependency = define_subpass_dep();
 
     // Create info for Render Pass
     VkRenderPassCreateInfo renderPassCreateInfo = {};
@@ -961,8 +988,8 @@ void create_render_pass()
     renderPassCreateInfo.pAttachments = &colourAttachment;
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpass;
-    renderPassCreateInfo.dependencyCount = 2; // subpassDependencies.size()
-    renderPassCreateInfo.pDependencies = subpassDependencies;
+    renderPassCreateInfo.dependencyCount = 1; // subpassDependencies.size()
+    renderPassCreateInfo.pDependencies = &subpassDependency;
 
     VkResult result = vkCreateRenderPass(context.device.logical_device, &renderPassCreateInfo, context.allocator, &context.main_renderpass.handle);
     if (result != VK_SUCCESS)
@@ -1072,11 +1099,16 @@ void create_graphics_pipeline()
     // dynamicStateEnables.push_back(VK_DYNAMIC_STATE_VIEWPORT);	// Dynamic Viewport : Can resize in command buffer with vkCmdSetViewport(commandbuffer, 0, 1, &viewport);
     // dynamicStateEnables.push_back(VK_DYNAMIC_STATE_SCISSOR);	// Dynamic Scissor	: Can resize in command buffer with vkCmdSetScissor(commandbuffer, 0, 1, &scissor);
 
-    //// Dynamic State creation info
-    // VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
-    // dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    // dynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStateEnables.size());
-    // dynamicStateCreateInfo.pDynamicStates = dynamicStateEnables.data();
+    const u32 dynamic_state_count = 2;
+    VkDynamicState dynamic_states[dynamic_state_count] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR};
+
+    // Dynamic State creation info
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
+    dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicStateCreateInfo.dynamicStateCount = dynamic_state_count;
+    dynamicStateCreateInfo.pDynamicStates = dynamic_states;
 
     // -- RASTERIZER --
     /*
@@ -1166,7 +1198,7 @@ void create_graphics_pipeline()
     pipelineCreateInfo.pVertexInputState = &vertexInputCreateInfo; // All the fixed function pipeline states
     pipelineCreateInfo.pInputAssemblyState = &inputAssembly;
     pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
-    pipelineCreateInfo.pDynamicState = NULL;
+    pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
     pipelineCreateInfo.pRasterizationState = &rasterizerCreateInfo;
     pipelineCreateInfo.pMultisampleState = &multisamplingCreateInfo;
     pipelineCreateInfo.pColorBlendState = &colourBlendingCreateInfo;
@@ -1249,24 +1281,151 @@ void create_command_pool()
         ERR_EXIT("Failed to create Command pool!\n", "create_command_pool::vkCreateCommandPool");
 }
 
+// FWD decl
+void vulkan_command_buffer_free(
+    vulkan_context *context,
+    VkCommandPool *pool,
+    vulkan_command_buffer *command_buffer);
 /**
  * Command buffers are destroyed automatically during the destruction of
  * the corresponding command pool so no need to explicitly free.
  */
 void create_command_buffers()
 {
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = context.device.graphics_command_pool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
-    allocInfo.pNext = 0;
+    // Allocate if not defined yet
+    if (!context.graphics_command_buffers)
+    {
+        context.graphics_command_buffers = (vulkan_command_buffer *)malloc(sizeof(vulkan_command_buffer) * context.swap_chain.image_count);
+        for (u32 i = 0; i < context.swap_chain.image_count; ++i)
+            memset(&context.graphics_command_buffers[i], 0, sizeof(vulkan_command_buffer));
+    }
 
-    commandBuffer.state = COMMAND_BUFFER_STATE_NOT_ALLOCATED;
-    VkResult result = vkAllocateCommandBuffers(context.device.logical_device, &allocInfo, &commandBuffer.handle);
-    if (result != VK_SUCCESS)
-        ERR_EXIT("Failed to allocate command buffers!\n", "create_command_buffer::vkAllocateCommandBuffers");
-    commandBuffer.state = COMMAND_BUFFER_STATE_READY;
+    for (u32 i = 0; i < context.swap_chain.image_count; ++i)
+    {
+        if (context.graphics_command_buffers[i].handle)
+        {
+            // Deallocate the existing ones
+            vulkan_command_buffer_free(
+                &context,
+                &context.device.graphics_command_pool,
+                &context.graphics_command_buffers[i]);
+        }
+        // reset
+        memset(&context.graphics_command_buffers[i], 0, sizeof(vulkan_command_buffer));
+
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = context.device.graphics_command_pool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        allocInfo.pNext = 0;
+
+        context.graphics_command_buffers[i].state = COMMAND_BUFFER_STATE_NOT_ALLOCATED;
+        VkResult result = vkAllocateCommandBuffers(context.device.logical_device, &allocInfo, &context.graphics_command_buffers[i].handle);
+        if (result != VK_SUCCESS)
+            ERR_EXIT("Failed to allocate command buffers!\n", "create_command_buffer::vkAllocateCommandBuffers");
+        context.graphics_command_buffers[i].state = COMMAND_BUFFER_STATE_READY;
+    }
+}
+
+// Sync
+//--------------
+
+void vulkan_fence_create(vulkan_context *context, b8 create_signaled, vulkan_fence *out_fence)
+{
+    out_fence->is_signaled = create_signaled;
+    VkFenceCreateInfo fence_create_info{};
+    fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    if (out_fence->is_signaled)
+        fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    VkResult res = vkCreateFence(context->device.logical_device, &fence_create_info, context->allocator, &out_fence->handle);
+}
+
+b8 vulkan_fence_wait(vulkan_context *context, vulkan_fence *fence, u64 timeout_ns)
+{
+    if (!fence->is_signaled)
+    { // We have to wait
+        VkResult result = vkWaitForFences(
+            context->device.logical_device,
+            1,
+            &fence->handle,
+            VK_TRUE,
+            timeout_ns);
+        switch (result)
+        {
+        case VK_SUCCESS:
+            fence->is_signaled = true;
+            return BC_TRUE;
+        case VK_TIMEOUT:
+            // KWARN("vk_fence_wait - Timed out");
+            break;
+        case VK_ERROR_DEVICE_LOST:
+            printf("ERROR: vk_fence_wait - VK_ERROR_DEVICE_LOST.");
+            break;
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            printf("ERROR: vk_fence_wait - VK_ERROR_OUT_OF_HOST_MEMORY.");
+            break;
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            printf("ERROR: vk_fence_wait - VK_ERROR_OUT_OF_DEVICE_MEMORY.");
+            break;
+        default:
+            printf("ERROR: vk_fence_wait - An unknown error has occurred.");
+            break;
+        }
+    }
+    else
+    {
+        // If already signaled, do not wait.
+        return BC_TRUE;
+    }
+
+    return BC_FALSE;
+}
+
+void vulkan_fence_reset(vulkan_context *context, vulkan_fence *fence)
+{
+    if (fence->is_signaled)
+    {
+        VkResult res = vkResetFences(context->device.logical_device, 1, &fence->handle);
+        if (res != VK_SUCCESS)
+            ERR_EXIT("Failed to reset fence.\n", "vkResetFences");
+
+        fence->is_signaled = BC_FALSE;
+    }
+}
+
+void create_sync_objects()
+{
+    // TODO: 1 for now
+    context.swap_chain.max_frames_in_flight = 1; // should be image_count - 1
+
+    context.image_available_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * context.swap_chain.max_frames_in_flight);
+    context.queue_complete_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * context.swap_chain.max_frames_in_flight);
+    context.in_flight_fences = (vulkan_fence *)(malloc(sizeof(vulkan_fence) * context.swap_chain.max_frames_in_flight));
+
+    for (u8 i = 0; i < context.swap_chain.max_frames_in_flight; ++i)
+    {
+        VkSemaphoreCreateInfo semaphore_create_info = {};
+        semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        VkResult result = vkCreateSemaphore(context.device.logical_device, &semaphore_create_info, context.allocator, &context.image_available_semaphores[i]);
+        if (result != VK_SUCCESS)
+            ERR_EXIT("Failed to create semaphore for image_available_semaphores.\n", "vkCreateSemaphore");
+
+        result = vkCreateSemaphore(context.device.logical_device, &semaphore_create_info, context.allocator, &context.queue_complete_semaphores[i]);
+        if (result != VK_SUCCESS)
+            ERR_EXIT("Failed to create semaphore for queue_complete_semaphores.\n", "vkCreateSemaphore");
+
+        vulkan_fence_create(&context, true, &context.in_flight_fences[i]);
+    }
+
+    // In flight fences should not yet exist at this point, so clear the list. These are stored in pointers
+    // because the initial state should be 0, and will be 0 when not in use. Acutal fences are not owned
+    // by this list.
+    // context.images_in_flight = darray_reserve(vulkan_fence, context.swapchain.image_count);
+    // for (u32 i = 0; i < context.swapchain.image_count; ++i) {
+    //     context.images_in_flight[i] = 0;
+    // }
 }
 
 //--------------
@@ -1303,18 +1462,37 @@ void renderpass_begin(vulkan_command_buffer *command_buffer, vulkan_renderpass *
     command_buffer->state = COMMAND_BUFFER_STATE_IN_RENDER_PASS;
 }
 
-void begin_frame(f32 delta_time)
+b8 begin_frame(f32 delta_time)
 {
     context.frame_delta_time = delta_time;
-    // TODO set context.image_index
-    u32 image_index = context.image_index;
+
+    // Wait for fence
+    if (!vulkan_fence_wait(
+            &context,
+            &context.in_flight_fences[context.current_frame],
+            UINT64_MAX))
+    {
+        printf("WARN: In-flight fence wait failure!"); // not an error but if we start to see too many, we should keep an eye on it,
+        return BC_FALSE;
+    }
+
+    // Acquire the image from the swap chain
+    VkResult result = vkAcquireNextImageKHR(
+        context.device.logical_device, context.swap_chain.handle,
+        UINT64_MAX,
+        context.image_available_semaphores[context.current_frame],
+        VK_NULL_HANDLE,
+        &context.image_index);
 
     // Begin recording commands
-    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
-    vulkan_command_buffer *command_buffer = &commandBuffer;
-
+    vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[context.image_index];
+    // reset first
+    vkResetCommandBuffer(command_buffer->handle, 0);
+    command_buffer->state = COMMAND_BUFFER_STATE_READY;
     command_buffer_begin(command_buffer);
-    renderpass_begin(command_buffer, &context.main_renderpass, image_index);
+    renderpass_begin(command_buffer, &context.main_renderpass, context.image_index);
+
+    return BC_TRUE;
 }
 
 //--------------
@@ -1322,8 +1500,7 @@ void begin_frame(f32 delta_time)
 //--------------
 void update_global_state()
 {
-    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
-    vulkan_command_buffer *command_buffer = &commandBuffer;
+    vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[context.image_index];
 
     // vulkan_object_shader_use
     vkCmdBindPipeline(command_buffer->handle, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
@@ -1349,8 +1526,7 @@ void update_global_state()
 
 void update_object()
 {
-    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
-    vulkan_command_buffer *command_buffer = &commandBuffer;
+    vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[context.image_index];
 
     vkCmdDraw(command_buffer->handle, 3, 1, 0, 0);
 }
@@ -1363,19 +1539,82 @@ void update()
 //--------------
 // End
 //--------------
-void end_frame(f32 delta_time)
+b8 end_frame(f32 delta_time)
 {
-    // vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[image_index];
-    vulkan_command_buffer *command_buffer = &commandBuffer;
+    vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[context.image_index];
 
     // End renderpass
     vkCmdEndRenderPass(command_buffer->handle);
-    command_buffer->state = COMMAND_BUFFER_STATE_RECORDING;
+
     // End command buffer
+    command_buffer->state = COMMAND_BUFFER_STATE_RECORDING;
     VkResult res = vkEndCommandBuffer(command_buffer->handle);
     if (res != VK_SUCCESS)
         ERR_EXIT("failed to record command buffer!\n", "vkEndCommandBuffer");
     command_buffer->state = COMMAND_BUFFER_STATE_RECORDING_ENDED;
+
+    // TODO: Fence wait
+
+    // Mark the image fence as in-use by this frame.
+    // context.images_in_flight[context.image_index] = &context.in_flight_fences[context.current_frame];
+
+    // Reset the fence for use on the next frame
+    vulkan_fence_reset(&context, &context.in_flight_fences[context.current_frame]);
+
+    // Submit the command buffer
+    // Begin queue submission
+    VkSubmitInfo submit_info = {};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    // Command buffer(s) to be executed.
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &(command_buffer->handle);
+    // The semaphore(s) to be signaled when the queue is complete.
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &context.queue_complete_semaphores[context.current_frame];
+    // Wait semaphore ensures that the operation cannot begin until the image is available.
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &context.image_available_semaphores[context.current_frame];
+
+    // Each semaphore waits on the corresponding pipeline stage to complete. 1:1 ratio.
+    // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT prevents subsequent colour attachment
+    // writes from executing until the semaphore signals (i.e. makes sure we present one frame is presented at a time)
+    VkPipelineStageFlags wait_flags[1] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submit_info.pWaitDstStageMask = wait_flags;
+
+    // Submit the queue
+    VkResult result = vkQueueSubmit(
+        context.device.graphicsQueue,
+        1,
+        &submit_info,
+        context.in_flight_fences[context.current_frame].handle);
+
+    if (result != VK_SUCCESS)
+    {
+        ERR_EXIT("vkQueueSubmit failed with result:", "vkQueueSubmit");
+        return BC_FALSE;
+    }
+
+    command_buffer->state = COMMAND_BUFFER_STATE_SUBMITTED;
+    // end of queue submission
+
+    // Return the image to the swapchain for presentation.
+    VkPresentInfoKHR present_info = {};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &context.queue_complete_semaphores[context.current_frame];
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &context.swap_chain.handle;
+    present_info.pImageIndices = &context.image_index;
+    present_info.pResults = 0;
+
+    result = vkQueuePresentKHR(context.device.presentQueue, &present_info);
+    // TODO: Handle other non-error cases
+    if (result != VK_SUCCESS)
+        ERR_EXIT("Failed to present image to swapchain.\n", "vkQueuePresentKHR");
+
+    // Increment (and loop) the index.
+    context.current_frame = (context.current_frame + 1) % context.swap_chain.max_frames_in_flight;
+    return BC_TRUE;
 }
 
 //--------------
@@ -1418,13 +1657,15 @@ void destroy_device(vulkan_device *the_device)
         the_device->swapchain_support.presentation_mode_count = 0;
     }
 
-    // memset(&the_device->swapchain_support.surfaceCapabilities, 0, sizeof(the_device->swapchain_support.surfaceCapabilities));
+    memset(&the_device->swapchain_support.surfaceCapabilities, 0, sizeof(the_device->swapchain_support.surfaceCapabilities));
+    the_device->graphics_queue_index = -1;
+    the_device->present_queue_index = -1;
 }
 
 void destroy_swapchain(vulkan_context *context)
 {
+    vkDeviceWaitIdle(context->device.logical_device);
     // Destroy depth attachment
-
     for (uint32_t i = 0; i < context->swap_chain.image_count; ++i)
         vkDestroyImageView(context->device.logical_device, context->swap_chain.views[i], context->allocator);
 
@@ -1466,6 +1707,81 @@ void destroy_command_pools()
     */
 }
 
+void vulkan_command_buffer_free(vulkan_context *context, VkCommandPool *pool, vulkan_command_buffer *command_buffer)
+{
+    vkFreeCommandBuffers(context->device.logical_device, *pool, 1, &command_buffer->handle);
+
+    command_buffer->handle = 0;
+    command_buffer->state = COMMAND_BUFFER_STATE_NOT_ALLOCATED;
+}
+
+// You don't need to destroy vkCommandBuffer
+// but we have to remove our handles
+void destroy_command_buffers()
+{
+    for (u32 i = 0; i < context.swap_chain.image_count; ++i)
+    {
+        if (context.graphics_command_buffers[i].handle)
+        {
+            vulkan_command_buffer_free(
+                &context,
+                &context.device.graphics_command_pool,
+                &context.graphics_command_buffers[i]);
+            context.graphics_command_buffers[i].handle = 0;
+        }
+    }
+
+    free(context.graphics_command_buffers);
+    context.graphics_command_buffers = 0;
+}
+
+void vulkan_fence_destroy(vulkan_context *context, vulkan_fence *fence)
+{
+    if (fence->handle)
+    {
+        vkDestroyFence(
+            context->device.logical_device,
+            fence->handle,
+            context->allocator);
+        fence->handle = 0;
+    }
+    fence->is_signaled = false;
+}
+
+void destroy_sync_objects()
+{
+    for (u8 i = 0; i < context.swap_chain.max_frames_in_flight; ++i)
+    {
+        if (context.image_available_semaphores[i])
+        {
+            vkDestroySemaphore(
+                context.device.logical_device,
+                context.image_available_semaphores[i],
+                context.allocator);
+            context.image_available_semaphores[i] = 0;
+        }
+        if (context.queue_complete_semaphores[i])
+        {
+            vkDestroySemaphore(
+                context.device.logical_device,
+                context.queue_complete_semaphores[i],
+                context.allocator);
+            context.queue_complete_semaphores[i] = 0;
+        }
+        vulkan_fence_destroy(&context, &context.in_flight_fences[i]);
+    }
+    free(context.image_available_semaphores);
+    context.image_available_semaphores = 0;
+
+    free(context.queue_complete_semaphores);
+    context.queue_complete_semaphores = 0;
+
+    free(context.in_flight_fences);
+    context.in_flight_fences = 0;
+
+    free(context.images_in_flight);
+    context.images_in_flight = 0;
+}
 //--------------
 // Public
 //--------------
@@ -1489,13 +1805,17 @@ int init_renderer(GLFWwindow *window, u32 width, u32 height)
     create_frame_buffers();
     create_command_pool();
     create_command_buffers();
+    create_sync_objects();
 
     return EXIT_SUCCESS;
 }
 
 void cleanup_renderer()
 {
+    vkDeviceWaitIdle(context.device.logical_device);
     // destroy in reverse order of creation
+    destroy_sync_objects();
+    destroy_command_buffers();
     destroy_command_pools();
     destroy_framebuffers();
     destroy_graphics_pipeline();

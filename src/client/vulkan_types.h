@@ -59,7 +59,10 @@ typedef struct vulkan_swapchain
     VkImage *images;
     VkImageView *views;
 
+    // vulkan_image depth_attachment;
     vulkan_framebuffer *framebuffers;
+
+    u8 max_frames_in_flight; //
 } vulkan_swapchain;
 
 typedef enum vulkan_command_buffer_state
@@ -92,6 +95,17 @@ typedef struct vulkan_command_buffer
     vulkan_command_buffer_state state;
 } vulkan_command_buffer;
 
+typedef struct vulkan_fence
+{
+    VkFence handle;
+    /**
+     * Happens whenever we are waiting for a fence
+     * and then that fence get signalled bec the operation has completed
+     *
+     */
+    b8 is_signaled;
+} vulkan_fence;
+
 typedef struct vulkan_device
 {
     VkPhysicalDevice physical_device;
@@ -118,6 +132,7 @@ typedef struct vulkan_context
     // Currently used image's index
     u32 image_index;
     f32 frame_delta_time;
+    u32 current_frame;
 
     VkInstance instance;
     VkAllocationCallbacks *allocator;
@@ -127,6 +142,24 @@ typedef struct vulkan_context
     vulkan_renderpass main_renderpass;
 
     vulkan_command_buffer *graphics_command_buffers;
+
+    /**
+     * Triggered when an image becomes available for rendering
+     * this is when we're done presenting it
+     */
+    VkSemaphore *image_available_semaphores; // darray
+
+    /**
+     * Triggered when a queue run against that and is now complete
+     * and the queue is ready to be presented
+     */
+    VkSemaphore *queue_complete_semaphores; // darray
+
+    u32 in_flight_fence_count;
+    vulkan_fence *in_flight_fences;
+    // Holds pointers to fences which exist and are owned elsewhere.
+    vulkan_fence **images_in_flight; // in sync with current_frame
+
 } vulkan_context;
 
 // Indices (locations) of Queue Families (if they exist at all)

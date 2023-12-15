@@ -6,6 +6,7 @@
 struct GLFWwindow;
 
 int init_renderer(GLFWwindow *window, u32 width, u32 height);
+void draw_frame(f32 delta_time = 0);
 void cleanup_renderer();
 
 #endif

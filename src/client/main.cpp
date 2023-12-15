@@ -43,6 +43,8 @@ int init()
     init_window("Test Window", app_state->width, app_state->height);
     if (init_renderer(window, app_state->width, app_state->height) == EXIT_FAILURE)
         return EXIT_FAILURE;
+
+    return EXIT_SUCCESS;
 }
 
 void run()
@@ -50,6 +52,7 @@ void run()
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
+        draw_frame();
     }
 }
 
