@@ -344,12 +344,18 @@ Usually they are used next to each other. Fences are used to ensure a frame is a
 
 - [Intel - API Without Secrets to Vulkan](https://www.intel.com/content/www/us/en/developer/articles/training/api-without-secrets-introduction-to-vulkan-part-1.html)
 - [Vulkan Guide](https://vkguide.dev/)
+- [Vulkan Compute](https://vulkan.org/user/pages/09.events/vulkanised-2023/vulkanised_2023_transitioning_to_vulkan_for_compute.pdf)
+
+### Vulkan Objects
+- [Understanding Vulkan objects](https://gpuopen.com/learn/understanding-vulkan-objects/)
+- [Vulkan Render target](https://i.stack.imgur.com/K0NRD.png)
 
 ### Dev Environment
 - [Vulkan SDK for CI/CD](https://www.reddit.com/r/vulkan/comments/h9exvb/vulkansdk_for_ci/)
 - [Vulkan Tutorial - Development Environment](https://vulkan-tutorial.com/Development_environment)
 
 ### Repositories
+- [Vulkan Samples Tutorial](https://vulkan.lunarg.com/doc/view/latest/windows/tutorial/html/index.html)
 - [KhronosGroup/VulkanSamples](https://github.com/KhronosGroup/Vulkan-Samples)
 - [Vulkan C++ examples and demos - SaschaWillems/Vulkan](https://github.com/SaschaWillems/Vulkan)
 - [Intel -> GameTechDev/IntroductionToVulkan](https://github.com/GameTechDev/IntroductionToVulkan)
