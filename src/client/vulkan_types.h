@@ -40,6 +40,7 @@ typedef struct vulkan_framebuffer
     vulkan_renderpass *renderpass;
 } vulkan_framebuffer;
 
+// vulkan_swapchain_support_info
 typedef struct SwapChainDetails
 {
     VkSurfaceCapabilitiesKHR surfaceCapabilities; // Surface properties, e.g. image size/extent
@@ -129,6 +130,14 @@ typedef struct vulkan_context
     // The framebuffer's current height.
     u32 framebuffer_height;
 
+    // Current generation of framebuffer size. If it does not match framebuffer_size_last_generation,
+    // a new one should be generated.
+    u64 framebuffer_size_generation;
+
+    // The generation of the framebuffer when it was last created. Set to framebuffer_size_generation
+    // when updated.
+    u64 framebuffer_size_last_generation;
+
     // Currently used image's index
     u32 image_index;
     f32 frame_delta_time;
@@ -137,7 +146,10 @@ typedef struct vulkan_context
     VkInstance instance;
     VkAllocationCallbacks *allocator;
     VkSurfaceKHR surface;
+
+    b8 recreating_swapchain;
     vulkan_swapchain swap_chain;
+
     vulkan_device device;
     vulkan_renderpass main_renderpass;
 

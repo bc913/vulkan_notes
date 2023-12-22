@@ -12,13 +12,13 @@ set(_SOURCE_FILES)
 list(APPEND _SOURCE_FILES
             file_system.h
             file_system.cpp
-            main.cpp 
-            vulkan_renderer.cpp
+            main.cpp
             defines.h
             log_assert.h
             utils.h
             utils.cpp
             vulkan_types.h
+            vulkan_renderer.cpp
 )
 target_sources(${PROJECT_NAME} PRIVATE ${_SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE glm glfw Vulkan::Headers volk::volk_headers)

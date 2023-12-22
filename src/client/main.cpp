@@ -16,6 +16,11 @@ typedef struct application_state
 } application_state;
 static application_state *app_state;
 
+static void handle_resize(GLFWwindow *window, int width, int height)
+{
+    renderer_on_resized(width, height);
+}
+
 void init_window(const char *name, const int width, const int height)
 {
     if (!glfwInit())
@@ -25,7 +30,7 @@ void init_window(const char *name, const int width, const int height)
         ERR_EXIT("GLFW failed to find the Vulkan loader.\nExiting... \n", "init_window");
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // disable resize for the moment
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // disable resize for the moment
 
     window = glfwCreateWindow(width, height, name, NULL, NULL);
     if (!window)
@@ -33,6 +38,8 @@ void init_window(const char *name, const int width, const int height)
         // It didn't work, so try to give a useful error:
         ERR_EXIT("Cannot create a window in which to draw!\n", "init_window");
     }
+
+    glfwSetFramebufferSizeCallback(window, handle_resize);
 }
 
 int init()
@@ -52,7 +59,7 @@ void run()
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-        draw_frame();
+        draw_frame(0, window);
     }
 }
 

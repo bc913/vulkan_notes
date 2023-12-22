@@ -16,11 +16,149 @@
 char stage_type_strs[OBJECT_SHADER_STAGE_COUNT][5] = {"vert", "frag"};
 VkShaderStageFlagBits stage_types[OBJECT_SHADER_STAGE_COUNT] = {VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
 
+const char *vulkan_result_string(VkResult result, b8 get_extended)
+{
+    // From: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkResult.html
+    // Success Codes
+    switch (result)
+    {
+    default:
+    case VK_SUCCESS:
+        return !get_extended ? "VK_SUCCESS" : "VK_SUCCESS Command successfully completed";
+    case VK_NOT_READY:
+        return !get_extended ? "VK_NOT_READY" : "VK_NOT_READY A fence or query has not yet completed";
+    case VK_TIMEOUT:
+        return !get_extended ? "VK_TIMEOUT" : "VK_TIMEOUT A wait operation has not completed in the specified time";
+    case VK_EVENT_SET:
+        return !get_extended ? "VK_EVENT_SET" : "VK_EVENT_SET An event is signaled";
+    case VK_EVENT_RESET:
+        return !get_extended ? "VK_EVENT_RESET" : "VK_EVENT_RESET An event is unsignaled";
+    case VK_INCOMPLETE:
+        return !get_extended ? "VK_INCOMPLETE" : "VK_INCOMPLETE A return array was too small for the result";
+    case VK_SUBOPTIMAL_KHR:
+        return !get_extended ? "VK_SUBOPTIMAL_KHR" : "VK_SUBOPTIMAL_KHR A swapchain no longer matches the surface properties exactly, but can still be used to present to the surface successfully.";
+    case VK_THREAD_IDLE_KHR:
+        return !get_extended ? "VK_THREAD_IDLE_KHR" : "VK_THREAD_IDLE_KHR A deferred operation is not complete but there is currently no work for this thread to do at the time of this call.";
+    case VK_THREAD_DONE_KHR:
+        return !get_extended ? "VK_THREAD_DONE_KHR" : "VK_THREAD_DONE_KHR A deferred operation is not complete but there is no work remaining to assign to additional threads.";
+    case VK_OPERATION_DEFERRED_KHR:
+        return !get_extended ? "VK_OPERATION_DEFERRED_KHR" : "VK_OPERATION_DEFERRED_KHR A deferred operation was requested and at least some of the work was deferred.";
+    case VK_OPERATION_NOT_DEFERRED_KHR:
+        return !get_extended ? "VK_OPERATION_NOT_DEFERRED_KHR" : "VK_OPERATION_NOT_DEFERRED_KHR A deferred operation was requested and no operations were deferred.";
+    case VK_PIPELINE_COMPILE_REQUIRED_EXT:
+        return !get_extended ? "VK_PIPELINE_COMPILE_REQUIRED_EXT" : "VK_PIPELINE_COMPILE_REQUIRED_EXT A requested pipeline creation would have required compilation, but the application requested compilation to not be performed.";
+
+    // Error codes
+    case VK_ERROR_OUT_OF_HOST_MEMORY:
+        return !get_extended ? "VK_ERROR_OUT_OF_HOST_MEMORY" : "VK_ERROR_OUT_OF_HOST_MEMORY A host memory allocation has failed.";
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+        return !get_extended ? "VK_ERROR_OUT_OF_DEVICE_MEMORY" : "VK_ERROR_OUT_OF_DEVICE_MEMORY A device memory allocation has failed.";
+    case VK_ERROR_INITIALIZATION_FAILED:
+        return !get_extended ? "VK_ERROR_INITIALIZATION_FAILED" : "VK_ERROR_INITIALIZATION_FAILED Initialization of an object could not be completed for implementation-specific reasons.";
+    case VK_ERROR_DEVICE_LOST:
+        return !get_extended ? "VK_ERROR_DEVICE_LOST" : "VK_ERROR_DEVICE_LOST The logical or physical device has been lost. See Lost Device";
+    case VK_ERROR_MEMORY_MAP_FAILED:
+        return !get_extended ? "VK_ERROR_MEMORY_MAP_FAILED" : "VK_ERROR_MEMORY_MAP_FAILED Mapping of a memory object has failed.";
+    case VK_ERROR_LAYER_NOT_PRESENT:
+        return !get_extended ? "VK_ERROR_LAYER_NOT_PRESENT" : "VK_ERROR_LAYER_NOT_PRESENT A requested layer is not present or could not be loaded.";
+    case VK_ERROR_EXTENSION_NOT_PRESENT:
+        return !get_extended ? "VK_ERROR_EXTENSION_NOT_PRESENT" : "VK_ERROR_EXTENSION_NOT_PRESENT A requested extension is not supported.";
+    case VK_ERROR_FEATURE_NOT_PRESENT:
+        return !get_extended ? "VK_ERROR_FEATURE_NOT_PRESENT" : "VK_ERROR_FEATURE_NOT_PRESENT A requested feature is not supported.";
+    case VK_ERROR_INCOMPATIBLE_DRIVER:
+        return !get_extended ? "VK_ERROR_INCOMPATIBLE_DRIVER" : "VK_ERROR_INCOMPATIBLE_DRIVER The requested version of Vulkan is not supported by the driver or is otherwise incompatible for implementation-specific reasons.";
+    case VK_ERROR_TOO_MANY_OBJECTS:
+        return !get_extended ? "VK_ERROR_TOO_MANY_OBJECTS" : "VK_ERROR_TOO_MANY_OBJECTS Too many objects of the type have already been created.";
+    case VK_ERROR_FORMAT_NOT_SUPPORTED:
+        return !get_extended ? "VK_ERROR_FORMAT_NOT_SUPPORTED" : "VK_ERROR_FORMAT_NOT_SUPPORTED A requested format is not supported on this device.";
+    case VK_ERROR_FRAGMENTED_POOL:
+        return !get_extended ? "VK_ERROR_FRAGMENTED_POOL" : "VK_ERROR_FRAGMENTED_POOL A pool allocation has failed due to fragmentation of the pool’s memory. This must only be returned if no attempt to allocate host or device memory was made to accommodate the new allocation. This should be returned in preference to VK_ERROR_OUT_OF_POOL_MEMORY, but only if the implementation is certain that the pool allocation failure was due to fragmentation.";
+    case VK_ERROR_SURFACE_LOST_KHR:
+        return !get_extended ? "VK_ERROR_SURFACE_LOST_KHR" : "VK_ERROR_SURFACE_LOST_KHR A surface is no longer available.";
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+        return !get_extended ? "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR" : "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR The requested window is already in use by Vulkan or another API in a manner which prevents it from being used again.";
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        return !get_extended ? "VK_ERROR_OUT_OF_DATE_KHR" : "VK_ERROR_OUT_OF_DATE_KHR A surface has changed in such a way that it is no longer compatible with the swapchain, and further presentation requests using the swapchain will fail. Applications must query the new surface properties and recreate their swapchain if they wish to continue presenting to the surface.";
+    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
+        return !get_extended ? "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR" : "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR The display used by a swapchain does not use the same presentable image layout, or is incompatible in a way that prevents sharing an image.";
+    case VK_ERROR_INVALID_SHADER_NV:
+        return !get_extended ? "VK_ERROR_INVALID_SHADER_NV" : "VK_ERROR_INVALID_SHADER_NV One or more shaders failed to compile or link. More details are reported back to the application via VK_EXT_debug_report if enabled.";
+    case VK_ERROR_OUT_OF_POOL_MEMORY:
+        return !get_extended ? "VK_ERROR_OUT_OF_POOL_MEMORY" : "VK_ERROR_OUT_OF_POOL_MEMORY A pool memory allocation has failed. This must only be returned if no attempt to allocate host or device memory was made to accommodate the new allocation. If the failure was definitely due to fragmentation of the pool, VK_ERROR_FRAGMENTED_POOL should be returned instead.";
+    case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+        return !get_extended ? "VK_ERROR_INVALID_EXTERNAL_HANDLE" : "VK_ERROR_INVALID_EXTERNAL_HANDLE An external handle is not a valid handle of the specified type.";
+    case VK_ERROR_FRAGMENTATION:
+        return !get_extended ? "VK_ERROR_FRAGMENTATION" : "VK_ERROR_FRAGMENTATION A descriptor pool creation has failed due to fragmentation.";
+    case VK_ERROR_INVALID_DEVICE_ADDRESS_EXT:
+        return !get_extended ? "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT" : "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT A buffer creation failed because the requested address is not available.";
+    // NOTE: Same as above
+    // case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
+    //    return !get_extended ? "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS" :"VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS A buffer creation or memory allocation failed because the requested address is not available. A shader group handle assignment failed because the requested shader group handle information is no longer valid.";
+    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+        return !get_extended ? "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT" : "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT An operation on a swapchain created with VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT failed as it did not have exlusive full-screen access. This may occur due to implementation-dependent reasons, outside of the application’s control.";
+    case VK_ERROR_UNKNOWN:
+        return !get_extended ? "VK_ERROR_UNKNOWN" : "VK_ERROR_UNKNOWN An unknown error has occurred; either the application has provided invalid input, or an implementation failure has occurred.";
+    }
+}
+
+b8 vulkan_result_is_success(VkResult result)
+{
+    // From: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkResult.html
+    switch (result)
+    {
+        // Success Codes
+    default:
+    case VK_SUCCESS:
+    case VK_NOT_READY:
+    case VK_TIMEOUT:
+    case VK_EVENT_SET:
+    case VK_EVENT_RESET:
+    case VK_INCOMPLETE:
+    case VK_SUBOPTIMAL_KHR:
+    case VK_THREAD_IDLE_KHR:
+    case VK_THREAD_DONE_KHR:
+    case VK_OPERATION_DEFERRED_KHR:
+    case VK_OPERATION_NOT_DEFERRED_KHR:
+    case VK_PIPELINE_COMPILE_REQUIRED_EXT:
+        return true;
+
+    // Error codes
+    case VK_ERROR_OUT_OF_HOST_MEMORY:
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+    case VK_ERROR_INITIALIZATION_FAILED:
+    case VK_ERROR_DEVICE_LOST:
+    case VK_ERROR_MEMORY_MAP_FAILED:
+    case VK_ERROR_LAYER_NOT_PRESENT:
+    case VK_ERROR_EXTENSION_NOT_PRESENT:
+    case VK_ERROR_FEATURE_NOT_PRESENT:
+    case VK_ERROR_INCOMPATIBLE_DRIVER:
+    case VK_ERROR_TOO_MANY_OBJECTS:
+    case VK_ERROR_FORMAT_NOT_SUPPORTED:
+    case VK_ERROR_FRAGMENTED_POOL:
+    case VK_ERROR_SURFACE_LOST_KHR:
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+    case VK_ERROR_OUT_OF_DATE_KHR:
+    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
+    case VK_ERROR_INVALID_SHADER_NV:
+    case VK_ERROR_OUT_OF_POOL_MEMORY:
+    case VK_ERROR_INVALID_EXTERNAL_HANDLE:
+    case VK_ERROR_FRAGMENTATION:
+    case VK_ERROR_INVALID_DEVICE_ADDRESS_EXT:
+    // NOTE: Same as above
+    // case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
+    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+    case VK_ERROR_UNKNOWN:
+        return false;
+    }
+}
+
 //--------------
 // Definitions
 //--------------
 
 static vulkan_context context;
+static u32 cached_framebuffer_width = 0;
+static u32 cached_framebuffer_height = 0;
 static VkPipeline graphicsPipeline;
 static VkPipelineLayout pipelineLayout;
 
@@ -254,7 +392,7 @@ vulkan_physical_device_queue_family_info get_queue_families(VkPhysicalDevice dev
 
 // Swap-chain - surface
 // ###############
-SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
+SwapChainDetails get_swap_chain_details(VkPhysicalDevice device) // vulkan_device_query_swapchain_support
 {
     SwapChainDetails details;
 
@@ -263,10 +401,11 @@ SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
 
     // formats
     uint32_t formats_count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, context.surface, &formats_count, NULL);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, context.surface, &formats_count, 0);
     if (formats_count)
     {
         details.format_count = formats_count;
+        // if (!details.formats)
         details.formats = (VkSurfaceFormatKHR *)(malloc(sizeof(VkSurfaceFormatKHR) * formats_count));
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, context.surface, &formats_count, details.formats);
     }
@@ -277,6 +416,7 @@ SwapChainDetails get_swap_chain_details(VkPhysicalDevice device)
     if (presentation_modes_count)
     {
         details.presentation_mode_count = presentation_modes_count;
+        // if (!details.presentationModes)
         details.presentationModes = (VkPresentModeKHR *)(malloc(sizeof(VkSurfaceFormatKHR) * presentation_modes_count));
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, context.surface, &presentation_modes_count, details.presentationModes);
     }
@@ -332,6 +472,22 @@ VkExtent2D choose_swap_extent(GLFWwindow *window, VkSurfaceCapabilitiesKHR *surf
     // Vulkan works with pixels so we need resolution in pixels
     int width, height;
     glfwGetFramebufferSize(window, &width, &height); // in pixels
+
+    VkExtent2D actual_extent = {};
+    actual_extent.width = (uint32_t)width;
+    actual_extent.height = (uint32_t)height;
+
+    // Surface also defines max and min, so make sure within boundaries by clamping value
+    actual_extent.width = clamp(actual_extent.width, surface_capabilities->minImageExtent.width, surface_capabilities->maxImageExtent.width);
+    actual_extent.height = clamp(actual_extent.height, surface_capabilities->minImageExtent.height, surface_capabilities->maxImageExtent.height);
+
+    return actual_extent;
+}
+
+VkExtent2D choose_swap_extent2(u32 width, u32 height, VkSurfaceCapabilitiesKHR *surface_capabilities)
+{
+    if (surface_capabilities->currentExtent.width != UINT32_MAX)
+        return surface_capabilities->currentExtent;
 
     VkExtent2D actual_extent = {};
     actual_extent.width = (uint32_t)width;
@@ -483,6 +639,11 @@ void create_instance()
 {
     uint32_t required_validation_count;
     const char **required_validation_layers = get_required_validation_layers(&required_validation_count);
+
+    context.framebuffer_width = (cached_framebuffer_width != 0) ? cached_framebuffer_width : 800;
+    context.framebuffer_height = (cached_framebuffer_height != 0) ? cached_framebuffer_height : 600;
+    cached_framebuffer_width = 0;
+    cached_framebuffer_height = 0;
 
     // Information about the application itself
     // Most data here doesn't affect the program and is for developer convenience
@@ -704,14 +865,16 @@ void create_logical_device()
     free(queue_create_infos);
 }
 
-void create_swap_chain(GLFWwindow *window)
+void create_swap_chain(GLFWwindow *window, u32 width, u32 height)
 {
     SwapChainDetails details = get_swap_chain_details(context.device.physical_device);
 
     // Choose the best values for the swap chain
     VkSurfaceFormatKHR surface_format = choose_best_surface_format(details.formats, details.format_count);
     VkPresentModeKHR presentation_mode = choose_best_presentation_mode(details.presentationModes, details.presentation_mode_count);
-    VkExtent2D extent = choose_swap_extent(window, &details.surfaceCapabilities);
+    // No need for this since we are passing width and heigh explicitly
+    // VkExtent2D extent = choose_swap_extent(window, &details.surfaceCapabilities);
+    VkExtent2D extent = choose_swap_extent2(width, height, &details.surfaceCapabilities);
 
     // How many images to store in the swap chain?
     /*
@@ -1244,7 +1407,6 @@ void create_frame_buffers()
             context.swap_chain.framebuffers[i].attachments[j] = attachments[j];
 
         context.swap_chain.framebuffers[i].attachment_count = attachment_count;
-
         context.swap_chain.framebuffers[i].renderpass = &context.main_renderpass;
 
         // Generate the handle
@@ -1253,8 +1415,8 @@ void create_frame_buffers()
         framebuffer_create_info.renderPass = context.main_renderpass.handle;
         framebuffer_create_info.attachmentCount = attachment_count;
         framebuffer_create_info.pAttachments = context.swap_chain.framebuffers[i].attachments;
-        framebuffer_create_info.width = context.swap_chain.extent_2d.width;   // TODO: context.framebuffer_width
-        framebuffer_create_info.height = context.swap_chain.extent_2d.height; // TODO: context.framebuffer_heigtht
+        framebuffer_create_info.width = context.framebuffer_width;   // context.swap_chain.extent_2d.width;
+        framebuffer_create_info.height = context.framebuffer_height; // context.swap_chain.extent_2d.height;
         framebuffer_create_info.layers = 1;
 
         VkResult result = vkCreateFramebuffer(context.device.logical_device, &framebuffer_create_info,
@@ -1398,8 +1560,6 @@ void vulkan_fence_reset(vulkan_context *context, vulkan_fence *fence)
 void create_sync_objects()
 {
     // TODO: 1 for now
-    context.swap_chain.max_frames_in_flight = 1; // should be image_count - 1
-
     context.image_available_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * context.swap_chain.max_frames_in_flight);
     context.queue_complete_semaphores = (VkSemaphore *)malloc(sizeof(VkSemaphore) * context.swap_chain.max_frames_in_flight);
     context.in_flight_fences = (vulkan_fence *)(malloc(sizeof(vulkan_fence) * context.swap_chain.max_frames_in_flight));
@@ -1422,10 +1582,81 @@ void create_sync_objects()
     // In flight fences should not yet exist at this point, so clear the list. These are stored in pointers
     // because the initial state should be 0, and will be 0 when not in use. Acutal fences are not owned
     // by this list.
-    // context.images_in_flight = darray_reserve(vulkan_fence, context.swapchain.image_count);
-    // for (u32 i = 0; i < context.swapchain.image_count; ++i) {
-    //     context.images_in_flight[i] = 0;
-    // }
+    context.images_in_flight = (vulkan_fence **)(malloc(sizeof(vulkan_fence *) * context.swap_chain.image_count));
+    for (u32 i = 0; i < context.swap_chain.image_count; ++i)
+    {
+        context.images_in_flight[i] = 0;
+    }
+}
+
+//--------------
+// Regenerate
+//--------------
+void destroy_framebuffers();
+void destroy_command_buffers(b8);
+void destroy_swapchain(vulkan_context *, b8);
+void create_frame_buffers();
+void create_command_buffers();
+
+b8 recreate_swapchain(GLFWwindow *window, b8 use_cached_framebuffer_size)
+{
+    if (context.recreating_swapchain)
+    {
+        printf("recreate_swapchain is called when already creating. Booting.\n");
+        return BC_FALSE;
+    }
+
+    if (context.framebuffer_height == 0 || context.framebuffer_width == 0)
+    {
+        printf("recreate swapchain called when window is < 1 in dimension.\n");
+        return BC_FALSE;
+    }
+
+    context.recreating_swapchain = BC_TRUE;
+
+    // Wait for any operation to complete
+    vkDeviceWaitIdle(context.device.logical_device);
+
+    // 1. Destroy old resources first
+    destroy_command_buffers(VK_FALSE);
+    destroy_framebuffers();
+    destroy_swapchain(&context, VK_TRUE);
+    for (u32 i = 0; i < context.swap_chain.image_count; ++i)
+        context.images_in_flight[i] = 0;
+
+    // TODO: Make sure we have most up-to-date format available
+    // vulkan_device_detect_depth_format(&context.device);
+
+    // 2. Create
+    /// Swapchain
+    if (use_cached_framebuffer_size)
+    {
+        context.framebuffer_width = cached_framebuffer_width;
+        context.framebuffer_height = cached_framebuffer_height;
+    }
+    create_swap_chain(window, context.framebuffer_width, context.framebuffer_height);
+    if (use_cached_framebuffer_size)
+    {
+        context.main_renderpass.x = 0;
+        context.main_renderpass.y = 0;
+        context.main_renderpass.w = context.framebuffer_width;
+        context.main_renderpass.h = context.framebuffer_height;
+        cached_framebuffer_width = 0;
+        cached_framebuffer_height = 0;
+    }
+
+    // for resizing
+    // Update framebuffer size generation.
+    // if(use_cached_framebuffer_size)
+    context.framebuffer_size_last_generation = context.framebuffer_size_generation;
+
+    create_frame_buffers();
+    create_command_buffers();
+
+    /// 3. Completed
+    context.recreating_swapchain = BC_FALSE;
+
+    return BC_TRUE;
 }
 
 //--------------
@@ -1462,9 +1693,44 @@ void renderpass_begin(vulkan_command_buffer *command_buffer, vulkan_renderpass *
     command_buffer->state = COMMAND_BUFFER_STATE_IN_RENDER_PASS;
 }
 
-b8 begin_frame(f32 delta_time)
+b8 begin_frame(f32 delta_time, GLFWwindow *window)
 {
     context.frame_delta_time = delta_time;
+
+    // Check if recreating swap chain and boot out.
+    if (context.recreating_swapchain)
+    {
+        // Make sure device is in idle and is not doing anything so you can proceed.
+        VkResult result = vkDeviceWaitIdle(context.device.logical_device);
+        if (!vulkan_result_is_success(result))
+        {
+            ERR_EXIT("vulkan_renderer_backend_begin_frame vkDeviceWaitIdle failed:", vulkan_result_string(result, true));
+            return BC_FALSE;
+        }
+        printf("Recreating swapchain, booting.");
+        return BC_FALSE;
+    }
+
+    // Check if the framebuffer has been resized. If so, a new swapchain must be created.
+    if (context.framebuffer_size_generation != context.framebuffer_size_last_generation)
+    {
+        VkResult result = vkDeviceWaitIdle(context.device.logical_device);
+        if (!vulkan_result_is_success(result))
+        {
+            ERR_EXIT("vulkan_renderer_backend_begin_frame vkDeviceWaitIdle (2) failed:", vulkan_result_string(result, true));
+            return BC_FALSE;
+        }
+
+        // If the swapchain recreation failed (because, for example, the window was minimized),
+        // boot out before unsetting the flag.
+        if (!recreate_swapchain(window, 1))
+        {
+            return BC_FALSE;
+        }
+
+        printf("Resized, booting.");
+        return BC_FALSE;
+    }
 
     // Wait for fence
     if (!vulkan_fence_wait(
@@ -1476,13 +1742,30 @@ b8 begin_frame(f32 delta_time)
         return BC_FALSE;
     }
 
-    // Acquire the image from the swap chain
+    // vulkan_swapchain_acquire_next_image_index
+    // Acquire the next image from the swap chain. Pass along the semaphore that should signaled when this completes.
+    // This same semaphore will later be waited on by the queue submission to ensure this image is available.
     VkResult result = vkAcquireNextImageKHR(
         context.device.logical_device, context.swap_chain.handle,
         UINT64_MAX,
         context.image_available_semaphores[context.current_frame],
         VK_NULL_HANDLE,
         &context.image_index);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    { // Not a failure
+        // Trigger swapchain recreation, then boot out of the render loop.
+        // The size of the image should match with framebuffer width and height.
+        recreate_swapchain(window, 0);
+        return BC_FALSE;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    {
+        printf("Failed to acquire swapchain image!");
+        return BC_FALSE;
+    }
+    // end: vulkan_swapchain_acquire_next_image_index
+
+    vulkan_fence_reset(&context, &context.in_flight_fences[context.current_frame]);
 
     // Begin recording commands
     vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[context.image_index];
@@ -1490,6 +1773,8 @@ b8 begin_frame(f32 delta_time)
     vkResetCommandBuffer(command_buffer->handle, 0);
     command_buffer->state = COMMAND_BUFFER_STATE_READY;
     command_buffer_begin(command_buffer);
+    context.main_renderpass.w = context.framebuffer_width;
+    context.main_renderpass.h = context.framebuffer_height;
     renderpass_begin(command_buffer, &context.main_renderpass, context.image_index);
 
     return BC_TRUE;
@@ -1509,15 +1794,16 @@ void update_global_state()
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (f32)context.swap_chain.extent_2d.width;
-    viewport.height = (f32)context.swap_chain.extent_2d.height;
+    viewport.width = (f32)context.framebuffer_width;   // context.swap_chain.extent_2d.width;
+    viewport.height = (f32)context.framebuffer_height; // context.swap_chain.extent_2d.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(command_buffer->handle, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = context.swap_chain.extent_2d;
+    scissor.extent.width = context.framebuffer_width; // context.swap_chain.extent_2d;
+    scissor.extent.height = context.framebuffer_height;
     vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);
 
     // vulkan_object_shader_update_global_state
@@ -1539,7 +1825,7 @@ void update()
 //--------------
 // End
 //--------------
-b8 end_frame(f32 delta_time)
+b8 end_frame(GLFWwindow *window, f32 delta_time)
 {
     vulkan_command_buffer *command_buffer = &context.graphics_command_buffers[context.image_index];
 
@@ -1553,10 +1839,17 @@ b8 end_frame(f32 delta_time)
         ERR_EXIT("failed to record command buffer!\n", "vkEndCommandBuffer");
     command_buffer->state = COMMAND_BUFFER_STATE_RECORDING_ENDED;
 
-    // TODO: Fence wait
+    // Make sure the previous frame is not using this image (i.e. its fence is being waited on)
+    if (context.images_in_flight[context.image_index] != VK_NULL_HANDLE)
+    {                      // was frame
+        vulkan_fence_wait( // Make sure previous frame is not using this image
+            &context,
+            context.images_in_flight[context.image_index],
+            UINT64_MAX);
+    }
 
     // Mark the image fence as in-use by this frame.
-    // context.images_in_flight[context.image_index] = &context.in_flight_fences[context.current_frame];
+    context.images_in_flight[context.image_index] = &context.in_flight_fences[context.current_frame];
 
     // Reset the fence for use on the next frame
     vulkan_fence_reset(&context, &context.in_flight_fences[context.current_frame]);
@@ -1609,10 +1902,21 @@ b8 end_frame(f32 delta_time)
 
     result = vkQueuePresentKHR(context.device.presentQueue, &present_info);
     // TODO: Handle other non-error cases
-    if (result != VK_SUCCESS)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        // Swapchain is out of date, suboptimal or a framebuffer resize has occurred. Trigger swapchain recreation.
+        recreate_swapchain(window, VK_FALSE);
+    }
+    else if (result != VK_SUCCESS)
+    {
         ERR_EXIT("Failed to present image to swapchain.\n", "vkQueuePresentKHR");
+    }
 
     // Increment (and loop) the index.
+    /*
+    By using the modulo (%) operator,
+    we ensure that the frame index loops around after every MAX_FRAMES_IN_FLIGHT enqueued frames.
+    */
     context.current_frame = (context.current_frame + 1) % context.swap_chain.max_frames_in_flight;
     return BC_TRUE;
 }
@@ -1620,11 +1924,17 @@ b8 end_frame(f32 delta_time)
 //--------------
 // Draw
 //--------------
-void draw_frame(f32 delta_time)
+void draw_frame(f32 delta_time, GLFWwindow *window)
 {
-    begin_frame(delta_time);
-    update();
-    end_frame(delta_time);
+    if (begin_frame(delta_time, window))
+    {
+        update();
+        b8 res = end_frame(window, delta_time);
+        if (!res)
+        {
+            ERR_EXIT("end_frame failed.\n", "draw_frame()\n.");
+        }
+    }
 }
 
 //--------------
@@ -1662,10 +1972,14 @@ void destroy_device(vulkan_device *the_device)
     the_device->present_queue_index = -1;
 }
 
-void destroy_swapchain(vulkan_context *context)
+void destroy_swapchain(vulkan_context *context, b8 is_to_recreate)
 {
-    vkDeviceWaitIdle(context->device.logical_device);
-    // Destroy depth attachment
+    if (!is_to_recreate)
+        vkDeviceWaitIdle(context->device.logical_device);
+
+    // Destroy the depth attachment (image)
+    // vulkan_image_destroy(context, &swapchain->depth_attachment);
+
     for (uint32_t i = 0; i < context->swap_chain.image_count; ++i)
         vkDestroyImageView(context->device.logical_device, context->swap_chain.views[i], context->allocator);
 
@@ -1678,21 +1992,34 @@ void destroy_graphics_pipeline()
     vkDestroyPipelineLayout(context.device.logical_device, pipelineLayout, context.allocator);
 }
 
+void destroy_renderpass()
+{
+    if (context.main_renderpass.handle)
+    {
+        vkDestroyRenderPass(context.device.logical_device, context.main_renderpass.handle, context.allocator);
+        context.main_renderpass.handle = 0;
+    }
+}
+void vulkan_frame_buffer_destroy(vulkan_context *context, vulkan_framebuffer *frame_buffer)
+{
+    vkDestroyFramebuffer(context->device.logical_device, frame_buffer->handle, context->allocator);
+    if (frame_buffer->attachments)
+    {
+        free(frame_buffer->attachments);
+        frame_buffer->attachments = 0;
+    }
+
+    frame_buffer->handle = 0;
+    frame_buffer->attachment_count = 0;
+    frame_buffer->renderpass = 0;
+}
+
 void destroy_framebuffers()
 {
     for (uint32_t i = 0; i < context.swap_chain.image_count; ++i)
     {
         vulkan_framebuffer fb = context.swap_chain.framebuffers[i];
-        vkDestroyFramebuffer(context.device.logical_device, fb.handle, context.allocator);
-        if (fb.attachments)
-        {
-            free(fb.attachments);
-            fb.attachments = 0;
-        }
-
-        fb.handle = 0;
-        fb.attachment_count = 0;
-        fb.renderpass = 0;
+        vulkan_frame_buffer_destroy(&context, &fb);
     }
 }
 // Since this is a device related stuff, this can be handled in destroy_device
@@ -1717,7 +2044,7 @@ void vulkan_command_buffer_free(vulkan_context *context, VkCommandPool *pool, vu
 
 // You don't need to destroy vkCommandBuffer
 // but we have to remove our handles
-void destroy_command_buffers()
+void destroy_command_buffers(b8 release_memory_resources)
 {
     for (u32 i = 0; i < context.swap_chain.image_count; ++i)
     {
@@ -1731,8 +2058,11 @@ void destroy_command_buffers()
         }
     }
 
-    free(context.graphics_command_buffers);
-    context.graphics_command_buffers = 0;
+    if (release_memory_resources)
+    {
+        free(context.graphics_command_buffers);
+        context.graphics_command_buffers = 0;
+    }
 }
 
 void vulkan_fence_destroy(vulkan_context *context, vulkan_fence *fence)
@@ -1790,16 +2120,15 @@ int init_renderer(GLFWwindow *window, u32 width, u32 height)
     if (init_volk() == EXIT_FAILURE)
         return EXIT_FAILURE;
 
-    // backend initialize
-    context.framebuffer_width = width;
-    context.framebuffer_height = height;
+    cached_framebuffer_width = width;
+    cached_framebuffer_height = height;
 
-    create_instance();
+    create_instance(); // context.frame_buffer size stuff is set here
     setup_debug_messenger();
     create_surface(window);
     get_physical_device();
     create_logical_device();
-    create_swap_chain(window);
+    create_swap_chain(window, context.framebuffer_width, context.framebuffer_height);
     create_render_pass();
     create_graphics_pipeline();
     create_frame_buffers();
@@ -1815,12 +2144,12 @@ void cleanup_renderer()
     vkDeviceWaitIdle(context.device.logical_device);
     // destroy in reverse order of creation
     destroy_sync_objects();
-    destroy_command_buffers();
+    destroy_command_buffers(VK_TRUE);
     destroy_command_pools();
     destroy_framebuffers();
     destroy_graphics_pipeline();
-    vkDestroyRenderPass(context.device.logical_device, context.main_renderpass.handle, context.allocator);
-    destroy_swapchain(&context);
+    destroy_renderpass();
+    destroy_swapchain(&context, 0);
     destroy_device(&context.device);
     vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);
 
@@ -1828,4 +2157,14 @@ void cleanup_renderer()
         DestroyDebugUtilsMessengerEXT(context.instance, debugMessenger, context.allocator);
 
     vkDestroyInstance(context.instance, context.allocator);
+}
+
+//--------------
+// Event handlers
+//--------------
+void renderer_on_resized(int width, int height)
+{
+    cached_framebuffer_width = width;
+    cached_framebuffer_height = height;
+    context.framebuffer_size_generation++;
 }
