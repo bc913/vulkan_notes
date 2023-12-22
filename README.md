@@ -370,3 +370,9 @@ Usually they are used next to each other. Fences are used to ensure a frame is a
 ### CMake
 - [FindVulkan - Doc](https://cmake.org/cmake/help/v3.25/module/FindVulkan.html)
 - [FindVulkan - src](https://gitlab.kitware.com/cmake/cmake/blob/master/Modules/FindVulkan.cmake)
+
+
+https://github.com/waitin2010/awesome-computer-graphics/blob/master/subjects/water.md
+https://www.vulkan.org/learn#blogs -> news to programming
+
+https://farside.ph.utexas.edu/teaching/336L/Fluidhtml/Fluidhtml.html
